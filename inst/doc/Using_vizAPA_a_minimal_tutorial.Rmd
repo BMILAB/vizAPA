@@ -1,0 +1,247 @@
+---
+title: 'Using vizAPA: a minimal tutorial'
+author: "Xiaohui Wu, Xingyu Bi, Wenbin Ye"
+date: "2023-09-20"
+output: 
+  html_document: 
+    toc: yes
+vignette: >
+  %\VignetteIndexEntry{Using_vizAPA_a_minimal_tutorial}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}    
+---
+
+# Overview
+
+This tutorial takes a `PACdataset` object storing a list of poly(A) sites as input and describes some simple but commonly used functions of vizAPA.
+
+# Demo PACdataset
+
+In the package of vizAPA, there is a demo `PACdataset` object of mouse sperm cells, containing 974 pAs [poly(A) sites] from 413 genes. This PACdataset has been annotated, with both pAs' and cells' meta data.
+
+```{r demo_data, eval=TRUE, message=FALSE, warning=FALSE}
+library(vizAPA)
+
+data(scPACds, package='vizAPA')
+
+# summary of the PACdataset
+movAPA::summary(scPACds)
+
+# cell meta data
+head(scPACds@colData)
+```
+
+Since the dataset already contains cell coordinates of UMAP, it is easy to view the 2D-embeddings of this dataset with vizAPA.
+
+```{r vizUMAP0, eval=TRUE}
+vizUMAP(scPACds, group='celltype', xcol='UMAP_1', ycol='UMAP_2')
+```
+
+# `vizStats` to summarize APA usages across cell categories
+
+`vizStats` draws different types of plots, including boxplot, violin plot, dot plot, and bubble plot, to show coordinates and expression (pA count or APA ratio) of given pAs or pAs in a gene across different conditions (e.g., cell types).
+
+Here is an example to plot a boxplot to show the expression levels of pAs in a given gene across cell types.
+
+We chose an example gene Odf4 (252868, ENSMUSG00000032921) for demonstration.
+
+```{r vizStats_boxplot, eval=TRUE, fig.show="hold", message=FALSE, warning=FALSE}
+## first, we check the gene column in the anno slot
+head(scPACds@anno[, c('chr','strand','coord','gene','ftr')])
+
+## the gene ID is entrez id, so we use 252868 instead of Odf4
+gene='252868'
+
+# plot a boxplot to compare the pA usage of this gene in different cell types
+vizStats(scPACds, group='celltype', gene=gene, PAs=NULL, figType="box")
+```
+
+Plot other types of plots.
+
+```{r vizStats_other, eval=TRUE, fig.show='asis', message=FALSE, warning=FALSE}
+# violin plot
+vizStats(scPACds, group='celltype', gene=gene, PAs=NULL, figType="violin")
+
+# violin plot with dots
+vizStats(scPACds, group='celltype', gene=gene, PAs=NULL, figType="dot")
+
+# bubble plot
+vizStats(scPACds, group='celltype', gene=gene, PAs=NULL, figType="bubble")
+```
+
+If no pA or gene is provided, then it is to plot the mean of all pAs (if it is a pA matrix) or genes (if it is a gene or APA index matrix) in the PACds. Here the PACds is a pA-expression matrix, so `vizStats` plots the mean value of all pAs across cell types.
+
+```{r vizStats_violin, eval=TRUE, fig.show="hold"}
+vizStats(scPACds, group='celltype', figType="violin")
+```
+
+# `vizUMAP` to plot 2D-embeddings
+
+`vizUMAP` plots a UMAP plot where each point is a cell and it's positioned based on the cell embedding determined by the reduction technique.
+
+```{r}
+gene='252868'
+# First, we check the coordinate labels of the 2D-embedding. 
+# For this data, the labels are UMAP_1 and UMAP_2.
+colnames(scPACds@colData)
+head(scPACds@colData)
+```
+
+```{r vizUMAP_all}
+# Plot the UMAP plot showing cell clusters and another UMAP plot overlaying 
+# with the mean expression value of pAs in each cell.
+vizUMAP(scPACds, group='celltype', xcol='UMAP_1', ycol='UMAP_2')
+```
+
+Providing a gene id or a list of genes in the gene column of the PACdataset, we can plot a UMAP overlaying with the mean expression value of the gene(s).
+
+```{r vizUMAP_agene}
+## Here we plot the Odf4 gene, 
+## overlaying the mean value of all pAs in this gene
+vizUMAP(scPACds, 
+        group='celltype', xcol='UMAP_1', 
+        ycol='UMAP_2', genes=gene)
+```
+
+Similarly, we can provide ids of pAs corresponding to the rownames in the PACds instead of genes.
+
+```{r vizUMAP_aPA}
+# here we only overlay one pA in Odf4 gene
+# here only show two cell types by specifying selGroup
+PAids='PA13514'
+vizUMAP(scPACds, group='celltype', xcol='UMAP_1', ycol='UMAP_2', selGroups=c('SC','RS'), PAs=PAids)
+```
+
+# `vizAPAmarkers` to visualize APA markers across cell categories
+
+An APA marker is an APA gene with differential APA usage between two pAs in the 3'UTR of the gene. Here we calculate the relative usage of distal pA (RUD) to represent the APA usage of each gene. An larger RUD means the longer 3'UTR. Note: `getAPAindexPACds` only implements the RUD index in `movAPA`, users can use `movAPA::movAPAindex` for more types of APA index.
+
+```{r getAPAindex, message=FALSE}
+# First, calculate the RUD index for each gene. 
+# Only genes with 3'UTR APA can be used for RUD calculation.
+iPACds=getAPAindexPACds(scPACds, choose2PA='PD')
+head(iPACds[, 1:10])
+```
+
+Then we obtain APA markers by wilcox.test for each pair of cell types.
+
+```{r vizAPAmarkers, warning=FALSE, message=FALSE}
+## obtain APA markers by wilcox.test for each pair of cell types
+m=getAPAmarkers(iPACds,  group='celltype', everyPair = TRUE)
+
+## show marker numbers
+table(m$cluster1, m$cluster2)
+
+## show marker details
+head(m)
+
+# Visualize the top 6 APA markers, showing all the three cell types
+vizAPAMarkers(iPACds, group='celltype', 
+              markers=m$rowid[1:6], 
+              figType = 'violin')
+
+# Plot a heatmap for APA markers
+vizAPAMarkers(iPACds, group='celltype', 
+              markers=m$rowid[1:6], 
+              figType = 'heatmap')
+
+# Plot a bubble plot for markers
+vizAPAMarkers(iPACds, group='celltype', 
+              markers=m$rowid[1:6], 
+              figType = 'bubble')
+
+# Switch the x/y axis of the bubble plot
+vizAPAMarkers(iPACds, group='celltype', 
+              markers=m$rowid[1:6], 
+              figType = 'bubble', 
+              statTheme=list(xgroup=FALSE))
+
+```
+
+Next, we can plot UMAP for these APA markers.
+
+```{r vizAPAMarkers_umap2, out.height="90%",out.width="90%"}
+# Plot the UMAP plot
+vizAPAMarkers(iPACds, 
+              group='celltype', 
+              markers=m$rowid[1:6], 
+              figType="umap", 
+              umap.x='UMAP_1', umap.y='UMAP_2')
+```
+
+The above examples detect markers between every pair of cell types. It is also possible to compare one cell type with all other cells.
+
+```{r getAPAmarkers_ES}
+# Detect markers between ES and all other cells.
+m=getAPAmarkers(scPACds,  group='celltype', cluster1='ES')
+```
+
+```{r}
+head(m)
+table(m$cluster1, m$cluster2)
+```
+
+# `vizTracks` to plot gene model, pAs and BAM tracks
+
+One unique feature of vizAPA is plotting IGV-like plot, including gene models, pA positions and BAM coverages.
+
+## Prepare BAM files
+
+The BAM files and the corresponding index (.bai) files for the following analysis can be downloaded from the GitHub site of vizAPA: [mouse.sperm.bam](https://github.com/BMILAB/vizAPA/tree/refer). For demonstration, these BAM files contain only three genes [66514(Asrgl1), 21463 (Tcp11),27058(Srp9)] extracted from the original BAM (accession number: GSM2803334).
+
+```{r readBam}
+#Create the list of BAM files
+bam.files=c("dedup_GSM2803334.ES.mini.sorted.bam",
+            "dedup_GSM2803334.RS.mini.sorted.bam",
+            "dedup_GSM2803334.SC.mini.sorted.bam")
+bam.groups=c("ES","RS","SC")
+bam.labels=c("ES" ,"RS","SC")
+bam.path='./'
+
+bams<-readBAMFileNames(bam.files=bam.files, 
+                       bam.path=bam.path, 
+                       bam.labels = bam.labels, 
+                       bam.groups = bam.groups)
+
+bams
+```
+
+## Load genome annotation to an annoHub
+
+In vizAPA, the genome annotation is used for the track plots to show gene models in a genomic region. The genome annotation could be retrieved from several sources, including gff3/gtf file, TxDb, EnsDb, BioMart, and OrganismDb. Users can provide one or more annotation sources.
+
+We can make an `annoHub` object storing different annotation sources, which can be used by many functions in vizAPA.
+In the following, we used the TxDB annotation for demonstration.
+
+```{r annoHub, warning=FALSE, message=FALSE}
+annoSource=new("annoHub")
+library(TxDb.Mmusculus.UCSC.mm10.knownGene, quietly = TRUE)
+txdb=TxDb.Mmusculus.UCSC.mm10.knownGene
+annoSource=addAnno(annoSource, txdb)
+annoSource
+```
+
+## Plot tracks for a specified gene
+
+Having prepared the `PACdataset`, `annoHub`, and BAM files, we can easily plot an example gene (here is the Srp9 gene), with gene model, pA coordinates, and BAM coverages. 
+
+```{r vizTracks, fig.show="hold", message=FALSE, warning=FALSE}
+gene=27058
+vizTracks(gene=gene, 
+          bams=bams, 
+          PACds.list=list(PA=scPACds), 
+          PA.show=c("pos"),
+          annoSource=annoSource,
+          PA.columns="coord", PA.width=10,
+          space5=1000, space3=1000)
+
+```
+
+# Session information
+
+The session information records the versions of all the packages used in the generation of the present document.
+
+```{r}
+sessionInfo()
+```
+
