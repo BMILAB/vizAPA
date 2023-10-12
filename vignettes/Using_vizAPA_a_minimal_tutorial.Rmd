@@ -2,8 +2,10 @@
 title: 'Using vizAPA: a minimal tutorial'
 author: "Xiaohui Wu, Xingyu Bi, Wenbin Ye"
 date: "2023-09-20"
-output: 
-  html_document: 
+output:
+  pdf_document:
+    toc: yes
+  html_document:
     toc: yes
 vignette: >
   %\VignetteIndexEntry{Using_vizAPA_a_minimal_tutorial}
@@ -114,6 +116,8 @@ vizUMAP(scPACds, group='celltype', xcol='UMAP_1', ycol='UMAP_2', selGroups=c('SC
 
 # `vizAPAmarkers` to visualize APA markers across cell categories
 
+## `getAPAmarkers` to get APA markers
+
 An APA marker is an APA gene with differential APA usage between two pAs in the 3'UTR of the gene. Here we calculate the relative usage of distal pA (RUD) to represent the APA usage of each gene. An larger RUD means the longer 3'UTR. Note: `getAPAindexPACds` only implements the RUD index in `movAPA`, users can use `movAPA::movAPAindex` for more types of APA index.
 
 ```{r getAPAindex, message=FALSE}
@@ -125,7 +129,7 @@ head(iPACds[, 1:10])
 
 Then we obtain APA markers by wilcox.test for each pair of cell types.
 
-```{r vizAPAmarkers, warning=FALSE, message=FALSE}
+```{r getAPAmarkers, warning=FALSE, message=FALSE}
 ## obtain APA markers by wilcox.test for each pair of cell types
 m=getAPAmarkers(iPACds,  group='celltype', everyPair = TRUE)
 
@@ -134,7 +138,11 @@ table(m$cluster1, m$cluster2)
 
 ## show marker details
 head(m)
+```
 
+
+## `vizAPAMarkers` to visualize multiple APA markers
+```{r vizAPAmarkers, warning=FALSE, message=FALSE}
 # Visualize the top 6 APA markers, showing all the three cell types
 vizAPAMarkers(iPACds, group='celltype', 
               markers=m$rowid[1:6], 
@@ -169,6 +177,18 @@ vizAPAMarkers(iPACds,
               umap.x='UMAP_1', umap.y='UMAP_2')
 ```
 
+## Visualize single APA marker
+
+`vizAPAMarkers` is used for visualize multiple APA markers. When only one marker is provided, we can use `vizStats` instead.
+
+```{r viz_single_marker}
+vizStats(iPACds, group='celltype', figType="dot", gene=m$rowid[1])
+
+## To change the cell type order
+vizStats(iPACds, group='celltype', figType="dot", gene=m$rowid[1], selGroups=c('SC','RS','ES'))
+```
+
+## APA markers for one cell type
 The above examples detect markers between every pair of cell types. It is also possible to compare one cell type with all other cells.
 
 ```{r getAPAmarkers_ES}
@@ -180,6 +200,7 @@ m=getAPAmarkers(scPACds,  group='celltype', cluster1='ES')
 head(m)
 table(m$cluster1, m$cluster2)
 ```
+
 
 # `vizTracks` to plot gene model, pAs and BAM tracks
 
