@@ -6,13 +6,18 @@ Alternative polyadenylation (APA) is a widespread post-transcriptional regulator
 
 * The vizAPA package mainly consists of six modules.
 
-<img src="img/schema.png" width="100%" />
+<img src="img/schema.png" width="60%" />
 
 (1) Data input module that imports different types of APA data through a compact data structure PACdataset. 
+
 (2) Genome annota-tion module that builds internally an annoHub data structure for adapting to different genome annotation sources from different species. 
+
 (3) Visualization module vizTracks that generates a ge-nome-browser-like plot, which utilizes tracks to display different types information related to APA, including gene models, positions and expression levels or usages of poly(A) sites, read alignments, and single-cell read counts. 
+
 (4) Visualization module vizStats that generates various charts, including violin plot, box plot, bubble plot, and dot plo, to visualize usages of any given poly(A) site(s) (e.g., proximal and distal sites) in a gene across different cell groups. 
+
 (5) Visualization module vizUMAP that learns two-dimensional embeddings for visualizing clusters of cells with simi-lar APA expression or usage profiles. 
+
 (6) Visualization module vizAPAmarkers that identifies genes with differential APA usages (called APA markers) and generate rich plots, including violin plot, heat map, bubble plot, and UMAP plot, for the visualization of selected APA markers.
 
 ## Getting started
