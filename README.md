@@ -1,5 +1,5 @@
 # vizAPA v0.1.0 (released on 2023/10/12)
-visualizing dynamics of alternative polyad-enylation from bulk and single-cell data
+vizAPA: visualizing dynamics of alternative polyad-enylation from bulk and single-cell data
 
 ## About
 Alternative polyadenylation (APA) is a widespread post-transcriptional regulatory mechanism across all eukaryotes. With the accumulation of genome-wide APA sites, especially those with sin-gle-cell resolution, it is imperative to develop easy-to-use visualization tools to guide APA analysis. We developed vizAPA for visualizing APA dynamics from bulk and single-cell data. vizAPA imports various types of APA data and genome annotation sources through unified data structures. vizAPA also enables identification of APA markers with differential APA usage. Four unique modules are provided in vizAPA for visualizing APA dynamics across cell groups and at the single-cell level. 
@@ -37,7 +37,7 @@ devtools::install_local("your_path_of_vizAPA-master.zip", build_vignettes = TRUE
 ```
 
 ## Application examples
-You can also browse the vignette using the following command on the R console:
+Vignettes can be found [here](https://github.com/BMILAB/vizAPA/tree/master/inst/doc). Or you can also browse the vignette using the following command on the R console:
 ```
 browseVignettes('vizAPA')
 ```
@@ -59,4 +59,4 @@ This documentation describes how to use vizAPA to visualize poly(A) sites (pAs) 
 
 
 ## Citation
-If you are using vizAPA, please cite: [Xingyu Bi#, Wenbin Ye#, Xin Cheng, Ning Yang, and Xiaohui Wu*: vizAPA: visualizing dynamics of alternative polyadenylation from bulk and single-cell data.
+If you are using vizAPA, please cite: Xingyu Bi#, Wenbin Ye#, Xin Cheng, Ning Yang, and Xiaohui Wu*: vizAPA: visualizing dynamics of alternative polyadenylation from bulk and single-cell data.
