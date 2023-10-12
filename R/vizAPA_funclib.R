@@ -20,22 +20,6 @@ NULL
 
 options(stringsAsFactors = FALSE)
 
-## rm(list=ls())
-## setwd("D:/xhwu/sys/code/R/vizAPA/vizAPA")
-## devtools::check()
-## devtools::load_all()
-## roxygen2::roxygenise()
-## >>> Writing LOG.Rd
-## build&reload
-## devtools::build(binary=TRUE, vignettes=FALSE)
-
-## detach(package:vizAPA)
-## devtools::unload('vizAPA')
-## remove.packages("vizAPA")
-## install.packages("D:/xhwu/sys/code/R/vizAPA/vizAPA_0.1.0.tar.gz", repos = NULL, type = "source")
-## install.packages("D:/xhwu/sys/code/R/vizAPA/vizAPA_0.1.0.zip", repos = NULL, type = "win.binary")
-## library(vizAPA)
-
 # ------------------- data -------------------------------
 ## package?vizAPA
 #' @details
