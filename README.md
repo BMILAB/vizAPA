@@ -46,6 +46,8 @@ Vignettes can be found [here](https://github.com/BMILAB/vizAPA/tree/master/inst/
 ```
 browseVignettes('vizAPA')
 ```
+Data for these vignettes can be downloaded [here](https://github.com/BMILAB/vizAPA/tree/refer).
+
 ### Using_vizAPA_a_minimal_tutorial
 This tutorial takes a `PACdataset` object storing a list of poly(A) sites as input and describes some simple but commonly used functions of vizAPA.
 
@@ -57,10 +59,10 @@ This tutorial takes a `PACdataset` object storing a list of poly(A) sites as inp
 This tutorial takes a `PACdataset` object storing a list of poly(A) sites and BAM files as input and describes full usages of series function related to `vizTracks` in `vizAPA`.
 
 ### Read_PAC_data_from_Sierra
-This documentation describes how to use `Sierra` to detect poly(A) sites from single-cell RNA-seq data, read the poly(A) sites data from `Sierra`, and then analyze it with `vizAPA`. We used  single-cell RNA sequencing data from peripheral blood mononuclear cells (PBMCs) for demonstration. The specific procedure for Sierra identification and quantification of poly(A) sites can be found in:[Sierra](https://github.com/VCCRI/Sierra/wiki/Sierra-Vignette)
+This documentation describes how to use [Sierra](https://github.com/VCCRI/Sierra/wiki/Sierra-Vignette) to detect poly(A) sites from single-cell RNA-seq data, read the poly(A) sites data from `Sierra`, and then analyze it with `vizAPA`. We used single-cell RNA sequencing data from peripheral blood mononuclear cells (PBMCs) for demonstration. 
 
 ### Read_PACs_data_from_scAPAtrap
-This documentation describes how to use vizAPA to visualize poly(A) sites (pAs) identified from `scAPAtrap`. Here we used scRNA-seq data from peripheral blood mononuclear cells (PBMCs) for demonstration. Please follow the tutorial of [scAPAtrap](https://github.com/BMILAB/scAPAtrap/) first to identify pAs from scRNA-seq. The output of scAPAtrap is an RDA file containing a pA (i.e., peak in scAPAtrap) list with peaks' meta data and peaks' count data.
+This documentation describes how to use vizAPA to visualize poly(A) sites (pAs) identified from [scAPAtrap](https://github.com/BMILAB/scAPAtrap/).
 
 
 ## Citation
