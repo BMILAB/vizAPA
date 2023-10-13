@@ -49,14 +49,13 @@ browseVignettes('vizAPA')
 Data for these vignettes can be downloaded [here](https://github.com/BMILAB/vizAPA/tree/refer).
 
 ### Using_vizAPA_a_minimal_tutorial
-This tutorial takes a `PACdataset` object storing a list of poly(A) sites as input and describes some simple but commonly used functions of vizAPA.
+This tutorial takes a `PACdataset` object storing a list of poly(A) sites as input and describes how to quickly get started with vizAPA.
 
 ### Using_vizAPA_vizStats_a_full_tutorial
-This tutorial takes a `PACdataset` object storing a list of poly(A) sites as input and describes full usages of series function related to `vizStats`, `vizUMAP`, and `vizAPAmarkers` in `vizAPA`.
- `vizStats`, `vizUMAP`, and `vizAPAmarkers` are used for making statistics and visualization of pA read counts and APA usages across cells or cell types.
+This tutorial describes full usages of series functions related to `vizStats`, `vizUMAP`, and `vizAPAmarkers` in vizAPA. These functions are used for making statistics and visualization of poly(A) read counts and APA usages across cells or cell types.
 
 ### Using_vizAPA_vizTracks_a_full_tutorial
-This tutorial takes a `PACdataset` object storing a list of poly(A) sites and BAM files as input and describes full usages of series function related to `vizTracks` in `vizAPA`.
+This tutorial takes a `PACdataset` object storing a list of poly(A) sites and BAM files as input and describes full usages of series functions related to `vizTracks` in vizAPA. The `vizTracks` function generates genome-browser-like plot, which utilizes tracks to display different types information related to APA.
 
 ### Read_PAC_data_from_Sierra
 This documentation describes how to use [Sierra](https://github.com/VCCRI/Sierra/wiki/Sierra-Vignette) to detect poly(A) sites from single-cell RNA-seq data, read the poly(A) sites data from `Sierra`, and then analyze it with `vizAPA`. We used single-cell RNA sequencing data from peripheral blood mononuclear cells (PBMCs) for demonstration. 
