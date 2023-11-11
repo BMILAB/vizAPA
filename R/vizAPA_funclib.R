@@ -3201,7 +3201,7 @@ PACds2SeuratObject <- function(PACds, NA.set=0) {
 #' @family vizMarkers functions
 #' @export
 getAPAmarkers<-function(PACds, group, cluster1=NULL, cluster2=NULL, everyPair=TRUE,
-                        method = c('wilcox'), only.pos=TRUE, logFC=0.25, min.pct=0.1) {
+                        method = c('wilcox'), only.pos=FALSE, logFC=0.25, min.pct=0.1) {
 
   PACds=suppPACds(PACds, refresh = TRUE)
 
