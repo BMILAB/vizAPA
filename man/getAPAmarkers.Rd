@@ -11,7 +11,7 @@ getAPAmarkers(
   cluster2 = NULL,
   everyPair = TRUE,
   method = c("wilcox"),
-  only.pos = TRUE,
+  only.pos = FALSE,
   logFC = 0.25,
   min.pct = 0.1
 )

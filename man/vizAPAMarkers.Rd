@@ -21,7 +21,7 @@ vizAPAMarkers(
 
 \item{group}{The column recording cell categories in PACds@colData.}
 
-\item{selGroups}{A vector to specify the order and categories to plot, otherwise plot all or the first 10 (if N>10) categories.}
+\item{selGroups}{A vector to specify the order and categories to plot, otherwise plot all categories.}
 
 \item{markers}{A vector of gene names or PA ids considered as markers that should be all present in PACds@anno.}
 

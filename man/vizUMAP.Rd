@@ -28,7 +28,7 @@ vizUMAP(
 
 \item{annoUMAP}{Whether to plot the UMAP only with cell annotation but no expression overlay.}
 
-\item{selGroups}{A vector to specify the order and categories to plot, otherwise plot all or the first 10 (if N>10) categories.}
+\item{selGroups}{A vector to specify the order and categories to plot, otherwise plot all categories.}
 
 \item{genes}{A vector of gene names present in PACds@anno for filtering PACds.}
 

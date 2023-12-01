@@ -20,7 +20,7 @@ vizStats(
 
 \item{group}{The column recording cell categories in PACds@colData.}
 
-\item{selGroups}{A vector to specify the order and categories to plot, otherwise plot all or the first 10 (if N>10) categories.}
+\item{selGroups}{A vector to specify the order and categories to plot, otherwise plot all categories.}
 
 \item{gene}{A gene name, gene symbol, or gene id to filter PACds and gene model in the given gene.}
 
