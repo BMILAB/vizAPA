@@ -2677,7 +2677,7 @@ setStatTheme <- function(statTheme, check=TRUE) {
 #'
 #' @param PACds A dataset of the PACdataset class.
 #' @param group The column recording cell categories in PACds@colData.
-#' @param selGroups A vector to specify the order and categories to plot, otherwise plot all or the first 10 (if N>10) categories.
+#' @param selGroups A vector to specify the order and categories to plot, otherwise plot all categories.
 #' @param gene A gene name, gene symbol, or gene id to filter PACds and gene model in the given gene.
 #' @param PAs A vector of pA ids corresponding to rownames of PACds@counts.
 #' @param figType box for boxplot, violin for violin plot, dot for violin plot with dots, bubble for bubble plot.
@@ -2746,10 +2746,10 @@ vizStats<-function(PACds, group, selGroups=NULL, gene=NULL, PAs=NULL,
     cols=unique(PACds@colData[, group])
   }
   # at most 10 samples can be plot
-  if(length(cols)>10){
-    message("Warning: too many groups (>10) to plot, only show the first 10, please use subsetPACds() to filter less groups")
-    cols=cols[1:10]
-  }
+ # if(length(cols)>10){
+ #   message("Warning: too many groups (>10) to plot, only show the first 10, please use subsetPACds() to filter less groups")
+ #   cols=cols[1:10]
+ # }
 
   # filter gene or PA, if not filter, then plot mean of all gene/PA
   if (is.null(gene) & is.null(PAs)) { #mean of all gene/PA
@@ -2960,7 +2960,7 @@ getUMAPplot<-function(umap, xcol, ycol, group=NULL, overlay=NULL, statTheme=NULL
 #' @param xcol the column name in PACds@colData denoting the X-axis coordinates of the 2D embedding.
 #' @param ycol Same as xcol but for the Y-axis.  Both xcol and ycol are required to be in colData. See reduceDim() for getting 2D embeddings.
 #' @param annoUMAP Whether to plot the UMAP only with cell annotation but no expression overlay.
-#' @param selGroups A vector to specify the order and categories to plot, otherwise plot all or the first 10 (if N>10) categories.
+#' @param selGroups A vector to specify the order and categories to plot, otherwise plot all categories.
 #' @param genes A vector of gene names present in PACds@anno for filtering PACds.
 #' @param PAs A vector of pA ids present in rownames of PACds@counts.
 #'            If multiple genes or PAs are given, the average is calculated before drawing.
@@ -3018,10 +3018,10 @@ vizUMAP<-function(PACds, group, xcol, ycol, annoUMAP=TRUE,
     cols=unique(PACds@colData[, group])
   }
 
-  if(length(cols)>10){
-    message("Warning: too many groups (>10) to plot, only show the first 10, please use subsetPACds() to filter less groups")
-    cols=cols[1:10]
-  }
+ # if(length(cols)>10){
+ #   message("Warning: too many groups (>10) to plot, only show the first 10, please use subsetPACds() to filter less groups")
+ #   cols=cols[1:10]
+ # }
 
   PACds1=PACds
   if (!is.null(genes)) {
@@ -3295,7 +3295,7 @@ getAPAmarkers<-function(PACds, group, cluster1=NULL, cluster2=NULL, everyPair=TR
 #'
 #' @param PACds A dataset of the PACdataset class, with each row is gene or pA.
 #' @param group The column recording cell categories in PACds@colData.
-#' @param selGroups A vector to specify the order and categories to plot, otherwise plot all or the first 10 (if N>10) categories.
+#' @param selGroups A vector to specify the order and categories to plot, otherwise plot all categories.
 #' @param markers A vector of gene names or PA ids considered as markers that should be all present in PACds@anno.
 #' @param figType violin/heatmap/bubble/UMAP
 #' @param umap.x The column name in PACds@colData denoting the X-axis coordinates for UMAP plot.
