@@ -1,2 +1,8 @@
 2023/12/1
 Allow vizStat and vizUMAP to plot >10 cell clusters.
+2024/1/8
+Add heatmap for vizStats.
+Add gm.reduce, gm.label in vizTHEME; add hm.cluster.markers, hm.cluster.dend in statTHEME.
+Change implementation of vizAPAmarkers, using in-house code instead of Seurat's marker plots.
+Change default colors for scale.low/high.col.
+Add factor level support of PACds@colData$group to set order of the vizStats plot.

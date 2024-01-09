@@ -9,11 +9,11 @@ Date: 2023-09-01
 Depends: R (>= 3.5.0)
 Imports: Matrix, movAPA, GenomicRanges, ggplot2, ggbio, tidyr, dplyr, biomaRt, testthat,
         RColorBrewer, GenomicFeatures, Rsamtools, SeuratObject,
-        bamsignals, AnnotationFilter, GenomeInfoDb, 
-	IRanges, magrittr, methods
-Suggests: destiny, ggpubr, Seurat, knitr, rmarkdown
-VignetteBuilder: knitr
+        bamsignals, AnnotationFilter, GenomeInfoDb, IRanges, magrittr, methods, 
+	ComplexHeatmap, cowplot, circlize, ggnewscale, scales
+Suggests: destiny, ggpubr, Seurat
 License: GPL
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.2.3
+VignetteBuilder: knitr
