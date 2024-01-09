@@ -1,0 +1,484 @@
+---
+title: 'Using vizAPA: a minimal tutorial'
+author: "Xiaohui Wu, Xingyu Bi, Wenbin Ye"
+date: "2024-01-09"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+vignette: >
+  %\VignetteIndexEntry{Using_vizAPA_a_minimal_tutorial}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}    
+---
+
+# Overview
+
+This tutorial takes a `PACdataset` object storing a list of poly(A) sites as input and describes some simple but commonly used functions of vizAPA.
+
+# Demo PACdataset
+
+In the package of vizAPA, there is a demo `PACdataset` object of mouse sperm cells, containing 974 pAs [poly(A) sites] from 413 genes. This PACdataset has been annotated, with both pAs' and cells' meta data. The data contains three differentiation stages, including early stage (spermato-cytes, SC), intermediate stage (round spermatids, RS), and late stage (elongating spermatids, ES).
+
+```{r demo_data, eval=TRUE, message=FALSE, warning=FALSE}
+library(vizAPA)
+
+data(scPACds, package='vizAPA')
+
+# summary of the PACdataset
+movAPA::summary(scPACds)
+
+# cell meta data
+head(scPACds@colData)
+
+```
+
+The coordinate labels of the 2D-embedding have already been stored in the PACdataset. For this data, the labels are `UMAP_1` and `UMAP_2`. Otherwise, users can use `reduceDim()` to get the 2D-embeddings for the PACdataset.
+
+```{r coldata}
+colnames(scPACds@colData)
+head(scPACds@colData)
+```
+
+Since the dataset already contains cell coordinates of UMAP, it is easy to view the UMAP plot of this dataset with vizAPA. Here the `Annotation` plot shows the cell type annotation and the `MEAN` plot shows the mean read counts of all pAs in this PACdataset. For more details on the usage of vizUMAP, please refer to the following chapters.
+
+```{r vizUMAP0, eval=TRUE}
+vizUMAP(scPACds, group='celltype', xcol='UMAP_1', ycol='UMAP_2')
+```
+
+We can use `eoffice::topptx` to export the image in editable PPT format.
+
+```{r save_UMAP, eval=FALSE}
+eoffice::topptx(filename = 'figures.pptx', title="vizUMAP_annotation_RUD", 
+                width = 8, height = 4, append=FALSE)
+```
+
+# `vizStats` to explore APA dynamics across cell categories
+
+In addition to `vizUMAP`, `vizStats` draws different types of plots, including boxplot, violin plot, dot plot, bubble plot, and heatmap to show expression (pA read counts or APA ratio) of given pAs or pAs in a gene across different conditions (e.g., cell types).
+
+## `vizStats` to summarize APA usages across cell categories
+
+To investigate the global APA dynamics at the single-cell level, we calculated APA usage for each gene represented by RUD (Relative Usage of Distal poly(A) site) score of each cell. A larger RUD value of a gene in a cell means the longer 3'UTR of the gene in the cell.
+
+Note: `getAPAindexPACds` only implements the RUD index in `movAPA`, users can use `movAPA::movAPAindex` for more types of APA index.
+
+```{r vizUMAP_RUD, message=FALSE, warning=FALSE}
+# change the level order of the factor celltype in scPACds
+# to make it consistent with sperm differentiation
+scPACds@colData$celltype=factor(scPACds@colData$celltype, 
+                                levels=c('SC','RS','ES'))
+
+# get 3UTR PACds, only genes with 3'UTR APA can be used for RUD calculation.
+# this scPACds has only 3UTR pAs, so this step will remove nothing
+scPACds<-scPACds[scPACds@anno$ftr=="3UTR"]
+# get RUD
+RUD=getAPAindexPACds(scPACds, choose2PA = "PD")
+```
+
+First, we plot a violin plot with dots to show the mean RUD of all genes in the PACdataset, which reflects the global 3'UTR changes during the three stages. The plot shows transition of 3' UTR shortening (i.e., decreased RUD scores) during sperm cell differentiation (SC -\> RS -\> ES).
+
+```{r vizStats_dot, eval=TRUE, fig.show="hold"}
+vizStats(RUD, group='celltype', figType="dot")
+```
+
+We can also plot a specific gene or pA using `vizStats`. First, we check the gene column in the `anno` slot of scPACds, and found that the gene is represented as entrez id. It is easy to use `getAnnoGenes` in vizAPA to get genomic ranges of all genes from different genome annotation sources. Here we replaced the original entrez id to gene symbol for the RUD object.
+
+```{r gene_convert, message=FALSE, warning=FALSE}
+head(RUD@anno)
+
+library(Mus.musculus, quietly = TRUE)
+orgdb=Mus.musculus
+genes=getAnnoGenes(orgdb)
+RUD@anno=merge(RUD@anno, genes, by.x='gene', by.y='gene_entrezid', all.x=TRUE)
+# there are two entrez ids not in orgdb, so we use entrez id instead symbol
+RUD@anno$gene_symbol[is.na(RUD@anno$gene_symbol)]=
+  RUD@anno$gene[is.na(RUD@anno$gene_symbol)]
+RUD@anno$entrezid=RUD@anno$gene
+# set the gene column as gene_symbol
+RUD@anno$gene=RUD@anno$gene_symbol
+# set rownames of counts slot as gene_symbol
+rownames(RUD@counts)=RUD@anno$gene_symbol
+# after conversion
+head(RUD@anno)
+```
+
+Here we chose an example gene ASRGL1 (66514, ENSMUSG00000024654) for demonstration, showing the RUD score of this gene in each cell type. 
+
+```{r ASRGL1}
+gene='Asrgl1'
+RUD@anno[RUD@anno$gene==gene, ]
+```
+
+Here is an example to plot a heatmap to show the RUD score of pAs in a given gene across cell types. The RUD value of this gene across cells in each cell type are averaged.
+
+
+```{r vizStats_heatmap, eval=TRUE, fig.show="hold", message=FALSE, warning=FALSE}
+## plot a heatmap for summarizing average expression of pAs in this gene
+vizStats(RUD, group='celltype', gene=gene, figType="heatmap")
+
+## we can change the text size or remove text in the heatmap (heat.text.size=0)
+## or change the number of digits for the averaged value
+vizStats(RUD, group='celltype', gene=gene, figType="heatmap", 
+         statTheme = list(heat.text.size=6, heat.text.digits=4))
+
+```
+
+The returned plot is a ggplot2 object, we can using ggplot2 code to change the plot. For example, here we change the color of the heatmap.
+
+```{r vizStats_heatmap_ggplot2, eval=TRUE, fig.show="hold", message=FALSE, warning=FALSE}
+p=vizStats(RUD, group='celltype', gene=gene, figType="heatmap")
+p+ggplot2::scale_fill_gradientn(colours = grDevices::heat.colors(50)) + 
+  ggplot2::theme_minimal()
+```
+
+We can also show a boxplot instead. In this case, RUD scores of the gene in cells of the same cell type are not averaged as in the heatmap, so the boxplot shows the RUD profile of each gene in each cell type.
+
+```{r vizStats_boxplot, eval=TRUE, fig.show="hold", message=FALSE, warning=FALSE}
+vizStats(RUD, group='celltype', gene=gene, figType="box")
+```
+
+In addition, we can plot other types of plots, including violin plot, dot plot, and bubble plot. The violin plot and dot plot are similar to the boxplot.
+
+```{r vizStats_other, eval=TRUE, fig.show='asis', message=FALSE, warning=FALSE}
+# violin plot
+vizStats(RUD, group='celltype', gene=gene, figType="violin")
+
+# violin plot with dots, and each dot is one cell
+vizStats(RUD, group='celltype', gene=gene, figType="dot")
+
+#eoffice::topptx(filename = 'figures.pptx', title="gene_dot_plot", 
+#                width = 4, height = 4, append=TRUE)
+```
+
+The bubble plot is similar to the heatmap, but it also displays the number of cells where each pA expressed (RUD\>0). The larger the bubble is, the higher number of cells with RUD\>0 of that pA.
+
+```{r vizStats_bubble, eval=TRUE, fig.show='asis', message=FALSE, warning=FALSE}
+vizStats(RUD, group='celltype', gene=gene, figType="bubble")
+```
+
+## `vizStats` to summarize APA expression levels across cell categories
+
+In addition to using RUD score of a gene, we can also plot expression levels of individual pAs in a gene. Here is an example to plot a heatmap to show the **expression levels** of pAs in a given gene across cell types. The expression levels (read counts) of each pA of this gene across cells in each cell type are averaged.
+
+```{r vizStats_heatmap_count, eval=TRUE, fig.show="hold", message=FALSE, warning=FALSE}
+# for scPACds, the id type is entrezid
+geneid=66514
+## plot a heatmap for summarizing average expression of pAs in this gene
+vizStats(scPACds, group='celltype', gene=geneid, figType="heatmap")
+```
+
+We can also show a boxplot instead. In this case, expression levels of pA in cells of the same cell type are not averaged as in the heatmap, so the plot shows the expression profile of each pA in each cell type.
+
+```{r vizStats_box_count, eval=TRUE, fig.show="hold", message=FALSE, warning=FALSE}
+# plot a boxplot to compare the pA usage of this gene in different cell types
+vizStats(scPACds, group='celltype', gene=geneid, figType="box")
+
+#eoffice::topptx(filename = 'figures.pptx', title="gene_box_plot", 
+#                width = 4, height = 4, append=TRUE)
+```
+
+The bubble plot is similar to the heatmap, but it also displays the number of cells where each pA expressed (expression level\>0). The larger the bubble is, the higher number of cells with \>0 count of that pA.
+
+```{r vizStats_bubble_count, eval=TRUE, fig.show='asis', message=FALSE, warning=FALSE}
+vizStats(scPACds, group='celltype', gene=geneid,  figType="bubble")
+```
+
+If no pA or gene is provided, then it is to plot the mean of all pAs (if it is a pA matrix) or genes (if it is a gene or APA index matrix) in the PACdataset. Here the scPACds is a pA-expression matrix, so `vizStats` plots the mean value of all pAs across cell types.
+
+```{r vizStats_dot_count, eval=TRUE, fig.show="hold"}
+vizStats(scPACds, group='celltype', figType="dot")
+```
+
+# `vizUMAP` to plot 2D-embeddings
+
+`vizUMAP` plots a UMAP plot where each point is a cell and it's positioned based on the cell embedding determined by the reduction technique.
+
+To investigate the global APA dynamics at the single-cell level, we used `vizUMAP` to overlay the mean APA usage represented by RUD score of each cell on the 2D-embeddings. Here, the plot with gradient colors shows gradual transition of 3' UTR shortening (i.e., lower RUD scores) during sperm cell differentiation (SC \> RS \> ES).
+
+```{r vizUMAP_RUD_all}
+# show UMAP using RUD scores
+vizUMAP(RUD, group='celltype', xcol='UMAP_1', ycol='UMAP_2')
+
+#eoffice::topptx(filename = 'figures.pptx', title="vizUMAP_annotation_RUD", 
+#                width = 8, height = 4, append=TRUE)
+```
+
+In addition to plot all genes or pAs in a PACdataset, providing a gene id or a list of genes in the gene column of the PACdataset, we can plot a UMAP overlaying with the mean expression value or APA ratio (e.g., RUD score) of the gene(s).
+
+Here we plot a UMAP for the Asrgl1 gene, overlaying the RUD scores of this gene in each cell.
+
+```{r vizUMAP_agene}
+vizUMAP(RUD, 
+        group='celltype', xcol='UMAP_1', 
+        ycol='UMAP_2', genes=gene)
+```
+
+It seems that the default color gradient is not very distinguishing, we can modify the parameters of `statTHEME` to change colors for the UMAP. Please see the help document of `?setStatTheme` for details.
+
+After changing color, tt is clearer that the usage of the distal poly(A) site denoted by RUD score is varied across stages. The RUD score of this gene is decreased from SC to ES, suggesting the APA dynamics of of this gene during mouse spermatogenesis. It is also observed that the color of cells in the same cell type is not consistent, suggesting heterogeneous APA isoform expression among individual cells.
+
+```{r vizUMAP_agene2}
+vizUMAP(RUD, 
+        group='celltype', xcol='UMAP_1', ycol='UMAP_2', 
+        annoUMAP=TRUE,
+        genes=gene,
+        statTheme = list(scale.low.col='green', scale.high.col='red'))
+
+```
+
+Further, we can use `vizStats` to show RUD distributions using other plots, e.g., dot plot. It is clear that the overall higher RUD score in the SC stage and the heterogeneous RUD scores in each cell type.
+
+```{r vizStats_agene}
+vizStats(RUD, group='celltype', figType="dot", gene=gene)
+```
+
+In addition to gene IDs or symbols, we can provide ids of pAs corresponding to the rownames in the PACdataset instead of genes. For example, here we only overlay one pA (PA16510) in the Asrgl1 gene.
+
+```{r vizUMAP_aPA}
+PAids='PA16510'
+vizUMAP(scPACds, group='celltype', xcol='UMAP_1', ycol='UMAP_2', 
+        PAs=PAids, annoUMAP = FALSE)
+```
+
+# `vizAPAmarkers` to visualize APA markers across cell categories
+
+## `getAPAmarkers` to get APA markers
+
+An APA marker is an APA gene with differential APA usage between two pAs in the 3'UTR of the gene. Leveraging `FindMarkers` used in `Seurat`, `getAPAmarkers` of vizAPA used different statistical tests (e.g., wilcoxon rank sum test) to test the significance of difference of RUD scores of a gene between two cell groups.
+
+Of note, `getAPAmarkers` of vizAPA also allows using the read counts instead of RUD score to get APA markers, which treats each pA as a gene for differential expression (DE) detection.
+
+```{r getAPAmarkers_count, eval=FALSE}
+m=getAPAmarkers(scPACds,  group='celltype', everyPair = TRUE)
+```
+
+However, normally we use APA index/ratio (e.g., RUD) to get APA markers. Here we obtain APA markers for each pair of cell types using the RUD object. The resulted table lists all APA markers between each two cell types. The column `avg_log2FC` stores the fold change of mean RUD score between cell types, with \>0 means positive marker and \<0 means negative marker.
+
+```{r getAPAmarkers, warning=FALSE, message=FALSE}
+## obtain APA markers by wilcox.test for each pair of cell types
+m=getAPAmarkers(RUD,  group='celltype', everyPair = TRUE,  
+                min.pct = 0.1, logFC=0.12)
+
+## show marker details
+head(m)
+```
+
+Next, we can count the number of APA markers. Apparently, there are most number of markers between ES and SC, with much higher of negative markers between them. The higher nagative markers between ES and SC means these markers have lower RUD scores (avg_log2FC\<0, shorter 3'UTR) in ES than in SC. This is consistent with the fact that 3' UTR shortening is observed during sperm cell differentiation (SC \> RS \> ES).
+
+```{r bar_markerNum}
+countAPAmarkers(m)
+
+#eoffice::topptx(filename = 'figures.pptx', title="marker_num", 
+#                width = 8, height = 4, append=TRUE)
+```
+
+## `vizAPAMarkers` to visualize multiple APA markers
+
+It is easy to visualize given APA markers by setting `markers` in `vizAPAMarkers`, with different plots including violin plot, heatmap, and bubble plot. For example, here we plot the top 6 markers. From the above markers' table, these markers are with differential RUD scores between RS and SC, and all these markers are with higher RUD scores in SC.
+
+```{r markers_list, warning=FALSE, message=FALSE}
+markers=m$rowid[1:6]
+```
+
+Here we visualize the top 6 APA markers in all the three cell types. In this plot, each marker corresponds to one row, with overall higher RUD scores in SC than in RS.
+
+```{r vizAPAmarkers, warning=FALSE, message=FALSE}
+vizAPAMarkers(RUD, group='celltype', 
+              markers=markers, 
+              figType = 'violin')
+
+#eoffice::topptx(filename = 'figures.pptx', title="markers_violin", 
+#                width = 8, height = 6, append=TRUE)
+```
+
+It is easy to plot other types of figures to show these markers.
+
+```{r vizAPAmarkers_others, warning=FALSE, message=FALSE}
+
+# we can plot only two cell types, here SC and RS
+vizAPAMarkers(RUD, group='celltype', 
+              markers=markers, 
+              selGroups = c('SC','RS'),
+              figType = 'violin')
+
+# Plot a heatmap for APA markers
+vizAPAMarkers(RUD, group='celltype', 
+              markers=markers, 
+              figType = 'heatmap')
+
+# Plot a bubble plot for markers
+vizAPAMarkers(RUD, group='celltype', 
+              markers=markers, 
+              figType = 'bubble')
+
+# Switch the x/y axis of the bubble plot
+vizAPAMarkers(RUD, group='celltype', 
+              markers=markers, 
+              figType = 'bubble', 
+              statTheme=list(xgroup=FALSE))
+
+```
+
+Next, we can plot UMAP for these APA markers. It is clear that the mean RUD scores of these markers in the SC group is much higher than in the RS group.
+
+```{r vizAPAMarkers_umap2, out.height="90%",out.width="90%"}
+# Plot the UMAP plot
+vizAPAMarkers(RUD, 
+              group='celltype', 
+              markers=markers,
+              figType="umap", 
+              umap.x='UMAP_1', umap.y='UMAP_2')
+```
+
+## Visualize single APA marker
+
+`vizAPAMarkers` is used for visualizing multiple APA markers; When only one marker is provided, we can use `vizStats` instead.
+
+```{r viz_single_marker}
+vizStats(RUD, group='celltype', figType="dot", gene=markers[1])
+
+## To plot only the two cell types involved in the marker
+vizStats(RUD, group='celltype', figType="dot", gene=markers[1], 
+         selGroups=c('SC','RS'))
+
+## plot a heatmap to average RUD values across cell types
+vizStats(RUD, group='celltype', figType="heatmap", gene=markers[1])
+
+
+```
+
+## APA markers for one cell type
+
+The above examples detect markers between every pair of cell types. It is also possible to compare one cell type with all other cells. Here we detect markers between SC and all other cells, retaining those markers only with higher RUD in SC (`only.pos=TRUE`).
+
+```{r getAPAmarkers_SC}
+m=getAPAmarkers(RUD,  group='celltype', cluster1='SC', only.pos = TRUE)
+```
+
+```{r}
+head(m)
+countAPAmarkers(m, plot=F)
+```
+
+Similarly, we can plot top markers. Here we used violin plot to show the top 10 markers for demonstration. It can be seen that these markers are all with higher RUD scores in SC.
+
+```{r vizAPAmarkers2, warning=FALSE, message=FALSE}
+vizAPAMarkers(RUD, group='celltype', 
+              markers=m$rowid[1:10], 
+              figType = 'violin')
+```
+
+# `vizTracks` to plot gene model, pAs and BAM tracks
+
+One unique feature of vizAPA is plotting a genome-browser-like plot, including gene models, pA positions and BAM coverages.
+
+## Prepare BAM files
+
+The BAM files and the corresponding index (.bai) files for the following analysis can be downloaded from the GitHub site of vizAPA: [mouse.sperm.bam](https://github.com/BMILAB/vizAPA/tree/refer). For demonstration, these BAM files contain only three genes [66514 (Asrgl1), 21463 (Tcp11), 27058 (Srp9)] extracted from the original BAM file (accession number: GSM2803334).
+
+```{r readBam}
+#Create the list of BAM files
+bam.files=c("dedup_GSM2803334.ES.mini.sorted.bam",
+            "dedup_GSM2803334.RS.mini.sorted.bam",
+            "dedup_GSM2803334.SC.mini.sorted.bam")
+bam.groups=c("ES","RS","SC")
+bam.labels=c("ES" ,"RS","SC")
+bam.path='./'
+
+# here we set bam.order to make BAM colors consistent with PACdataset
+bams<-readBAMFileNames(bam.files=bam.files, 
+                       bam.path=bam.path, 
+                       bam.labels = bam.labels, 
+                       bam.groups = bam.groups,
+                       bam.order=c('SC','RS','ES'))
+bams
+```
+
+## Load genome annotation to an annoHub
+
+In vizAPA, the genome annotation is used for the track plots to show gene models in a genomic region. The genome annotation could be retrieved from several sources, including gff3/gtf file, TxDb, EnsDb, BioMart, and OrganismDb. Users can provide one or more annotation sources.
+
+We can make an `annoHub` object storing different annotation sources, which can be used by many functions in vizAPA. In the following, we used the `TxDB` annotation for demonstration.
+
+```{r annoHub, warning=FALSE, message=FALSE}
+annoSource=new("annoHub")
+library(TxDb.Mmusculus.UCSC.mm10.knownGene, quietly = TRUE)
+txdb=TxDb.Mmusculus.UCSC.mm10.knownGene
+annoSource=addAnno(annoSource, txdb)
+annoSource
+```
+
+## Plot tracks for a specified gene
+
+Having prepared the `PACdataset`, `annoHub`, and BAM files, we can easily plot an example gene (Asrgl1), with gene model, pA coordinates, and BAM coverages.
+
+```{r vizTracks, fig.show="hold", message=FALSE, warning=FALSE}
+vizTracks(gene=geneid, 
+          bams=bams, 
+          PACds.list=list(PA=scPACds), 
+          PA.show=c("pos"),
+          cells=TRUE, cells.group='celltype',
+          cells.width=200, cells.annoCoord=NULL,
+          cells.method=c('sum'), cells.sort=c('group'),
+          annoSource=annoSource,
+          PA.columns="coord", PA.width=10,
+          space5=0, space3=100,
+          )
+
+```
+
+We can also plot and customize individual tracks separately and then combine all tracks together.
+
+```{r tracks, warning=FALSE, message=FALSE}
+# gene model track
+gmtrack=getTrackGeneModel(gene=geneid, annoSource=annoSource, title=gene)
+
+
+# PA track
+pactrack=getTrackPACds(scPACds, gene=geneid, 
+                      PA.show=c("pos"), 
+                      PA.columns="coord", PA.width=10,
+                      title='PA') 
+# we can customize the track using ggplot2's grammer
+# pactrack$PA=pactrack$PA+ggplot2::theme_minimal()
+
+# cell track
+celltrack<-getTrackCells(scPACds, group='celltype', gene=geneid,
+                         sortMethod='sum', sortCells='group', log=FALSE,
+                         PA.columns="coord", PA.width=50, title='sum.cells')
+
+# bam track
+genomicRegion=getGenesRange(gene=geneid, annoSource, rt='list')
+# add 1000 bp to both ends of the region
+genomicRegion$start=genomicRegion$start-1000
+genomicRegion$end=genomicRegion$end+1000
+genomicRegion=paste0(unlist(genomicRegion), collapse=':')
+bamtrack<-getTrackBams(bams, genomicRegion=genomicRegion)
+
+# combine tracks
+tks<-c(gmtrack, pactrack, celltrack, bamtrack)
+names(tks)[1:3]=c(gene, 'pA', 'cells')
+ggbio::tracks(tks)
+```
+
+We can zoom in on a genomic region by specifying `xlim` and set the height of each track. For example, here we only display the 3'UTR area.
+
+```{r tracks_zoom, warning=FALSE, message=FALSE}
+# plot legend ‘horizontal’ or ‘vertical’
+ggbio::tracks(tks, heights=c(0.7, 0.7, 1.2, 1.2, 1.2, 1.2),
+              xlim=c(9111000, 9113500))+ 
+  ggplot2::theme(legend.direction = 'vertical')
+
+#eoffice::topptx(filename = 'figures.pptx', title="tracks", 
+#                width = 8, height = 8, append=TRUE)
+```
+
+# Session information
+
+The session information records the versions of all the packages used in the generation of the present document.
+
+```{r}
+sessionInfo()
+```
