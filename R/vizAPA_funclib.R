@@ -7,7 +7,7 @@
 #' width start end strand seqnames gaps makeGRangesFromDataFrame
 #' @importFrom IRanges IRanges subsetByOverlaps
 #' @importClassesFrom Matrix dgCMatrix dgeMatrix
-#' @importFrom ggplot2 element_rect element_line aes theme_bw theme element_text ggplot geom_line xlab ylab
+#' @importFrom ggplot2 scale_x_continuous unit vars geom_bar geom_text geom_tile element_rect element_line aes theme_bw theme element_text ggplot geom_line xlab ylab
 #' element_blank ggtitle facet_grid facet_wrap aes_string stat_ecdf labs annotate geom_point geom_vline
 #' scale_colour_manual labs margin scale_y_continuous theme_classic scale_fill_gradientn guides .data
 #' geom_text position_dodge ylim guide_legend scale_color_gradient coord_flip geom_boxplot scale_fill_manual
@@ -16,6 +16,10 @@
 #' @importFrom Matrix as.matrix colMeans colSums rowMeans rowSums t
 #' @importFrom utils head
 #' @importFrom SeuratObject "Idents<-"
+#' @importFrom ComplexHeatmap Heatmap anno_block
+#' @importFrom grid gpar
+#' @importFrom cowplot theme_cowplot
+#' @importFrom stats quantile
 NULL
 
 options(stringsAsFactors = FALSE)
@@ -625,6 +629,8 @@ getChrs <-function(obj, which=NULL) {
 #' @examples
 #' \dontrun{
 #' # Load different genome annotation sources
+#' library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+#' library(EnsDb.Hsapiens.v75)
 #' txdb=TxDb.Hsapiens.UCSC.hg19.knownGene
 #' ensdb=EnsDb.Hsapiens.v75
 #' orgdb=Homo.sapiens
@@ -1023,6 +1029,8 @@ vizTHEME <- list(
   gm.utr5.fill="black",
   gm.utr3.fill="grey",
   gm.exon.fill="brown",  gm.line="black",
+  gm.reduce=TRUE,
+  gm.label=NULL,
 
   # cols for vizCells
   cells.group.cols=c(brewer.pal(8, "Set2"), brewer.pal(8, "Set1")),
@@ -1096,7 +1104,10 @@ viz_noYLab_theme<- ggbio::theme_clear() + theme(
 #' \item{gm.utr5.fill}: colors for the gene model's 5'UTR, default is "black".
 #' \item{gm.utr3.fill}: colors for the gene model's 3'UTR, default is"grey".
 #' \item{gm.exon.fill}: colors for the exon regions, default is "brown".
-#' \item{gm.line}: colors for the lines (intron), default is "black"/
+#' \item{gm.line}: colors for the lines (intron), default is "black".
+#' \item{gm.reduce}: whether to collapse all features in the gene models, default is TRUE (collapse), only TRUE for collapsing.
+#' \item{gm.label}: whether to show the label of the gene models, default is NULL. NULL means when gm.reduce=TRUE, then gm.label=FALSE.
+#'      If gm.label is explicitly set, then will not be changed with gm.reduce.
 #'
 #' \item{cells.group.cols}: colors for the single-cell plot by vizCells, default is `c(brewer.pal(8, "Set2"), brewer.pal(8, "Set1"))`.
 #' \item{cells.scale.low}: colors for low ends of the gradient, default is 'white',
@@ -1149,6 +1160,20 @@ setVizTheme <- function(vizTheme, check=TRUE) {
     if (!is.null(vizTheme$bams.ylims)) {
       if (length(vizTheme$bams.ylims)!=2) stop("bams.ylims should have 2 elements, like c(2,10)")
     }
+    if (!is.null(vizTheme$gm.reduce )) {
+      if (vizTheme$gm.reduce==FALSE)
+        vizTheme$gm.reduce=NULL
+      else {
+        vizTheme$gm.reduce='reduce'
+        if (is.null(vizTheme$gm.label)) {
+          vizTheme$gm.label=FALSE
+        }
+      }
+    }
+  }
+
+  if (is.null(vizTheme$gm.label)) {
+    vizTheme$gm.label=TRUE
   }
   return(vizTheme)
 }
@@ -1163,6 +1188,7 @@ setVizTheme <- function(vizTheme, check=TRUE) {
 #' @param bam.path File path of the bam.files.
 #' @param bam.labels Short labels for each file of bam.files, default is BAM1...BAMn.
 #' @param bam.groups Groups for bam.files, default is 'g1' for all bam.files.
+#' @param bam.order reorder bam.labels for track plots. If provided, bam.labels should be all present in bam.order.
 #' @return A data frame storing BAM file information with fileName, group, label. This function will check the existence of each file (and the corresponding .bai file)!
 #' @export
 #' @name readBAMFileNames
@@ -1210,7 +1236,8 @@ setVizTheme <- function(vizTheme, check=TRUE) {
 #'             '_dir2/bam2.bam.bai', '_dir1','_dir2')
 #' @family vizTracks functions
 readBAMFileNames<-function(bam.files, bam.path=NULL,
-                           bam.labels=NULL, bam.groups=NULL) {
+                           bam.labels=NULL, bam.groups=NULL,
+                           bam.order=NULL) {
 
   if (!is.null(bam.path)) {
     if (!file.exists(file.path(bam.path))) {
@@ -1263,7 +1290,17 @@ readBAMFileNames<-function(bam.files, bam.path=NULL,
   }
 
   # It is possible that the BAM given by the user is located in a different path, so here fileName is the full path of the file name, removing the original filePath
-  return(data.frame(fileName=bam.files, group=bam.groups, label=bam.labels))
+  bams=data.frame(fileName=bam.files, group=bam.groups, label=bam.labels)
+
+  # set the order of the bam files for  plots
+  if (!is.null(bam.order)) {
+    if (!all(bam.labels %in% bam.order)) {
+      stop(bam.lables, 'not all in',bam.order,'\n')
+    }
+    bams$label=factor(bams$label, levels=bam.order)
+    bams=bams[order(bams$label), ]
+  }
+  return(bams)
 }
 
 
@@ -1315,6 +1352,11 @@ readBAMFileNames<-function(bam.files, bam.path=NULL,
 #' # and then get the gene model track
 #' getTrackGeneModel(genomicRegion=gr,
 #'                  annoSource=new("annoHub", annos=list(biomart=bm)))
+#' # customize gene track,
+#' # collapsing all features from all transcripts into one gene model
+#' getTrackGeneModel(genomicRegion=gr,
+#'                  annoSource=new("annoHub", annos=list(biomart=bm)),
+#'                  vizTheme=list(gm.reduce=TRUE))
 #' }
 #' @name getTrackGeneModel
 #' @family vizTracks functions
@@ -1325,6 +1367,8 @@ getTrackGeneModel <- function(genomicRegion=NULL,
                               title='genemodel', vizTheme=NULL) {
 
   VT=setVizTheme(vizTheme)
+
+  if (!is.null(gene)) gene=as.character(gene)
 
   if (is.null(genomicRegion) & is.null(gene)) stop("Please specify genomicRegion or gene for getTrackGeneModel!")
   if (!is.null(genomicRegion) & !is.null(gene)) stop("Please specify genomicRegion or gene (not both!) for getTrackGeneModel!")
@@ -1383,6 +1427,15 @@ getTrackGeneModel <- function(genomicRegion=NULL,
                        color = vizTHEME$gm.exon.fill, fill = vizTHEME$gm.exon.fill) +
       viz_geneModel_theme
 
+  }  else if (annoSource@defaultAnno=='genes') {
+    # gene, use the genomicRegion as axis
+    geneGR = regionGR
+    mcols(geneGR)$model='exon'
+    geneGR=GenomicRanges::split(geneGR)
+    pg=ggbio::autoplot(geneGR, aes(type = model),  exon.rect.h=0.5,
+                       color = vizTHEME$gm.exon.fill, fill = vizTHEME$gm.exon.fill) +
+      viz_geneModel_theme
+
   } else if (annoSource@defaultAnno=='gff') {
 
     # anno=parseGff's result
@@ -1412,7 +1465,8 @@ getTrackGeneModel <- function(genomicRegion=NULL,
       pg=NULL
     } else {
       pg=ggbio::autoplot(geneGR, aes(type = model),
-                         label.color = "black", color = VT$gm.exon.fill, fill = VT$gm.exon.fill) +
+                         label.color = "black", color = VT$gm.exon.fill, fill = VT$gm.exon.fill,
+                         label=VT$gm.label, stat = VT$gm.reduce) +
         viz_geneModel_theme
     }
   } else if (annoSource@defaultAnno=='txdb') {
@@ -1428,7 +1482,8 @@ getTrackGeneModel <- function(genomicRegion=NULL,
 
     ## The GR can be plot by ggbio::autoplot(annoSource['txdb'], which=regionGR)
     pg=ggbio::autoplot(annoSource['txdb'], which=regionGR,
-                       label.color = "black", color = VT$gm.exon.fill, fill = VT$gm.exon.fill) +
+                       label.color = "black", color = VT$gm.exon.fill, fill = VT$gm.exon.fill,
+                       label=VT$gm.label, stat = VT$gm.reduce) +
       viz_geneModel_theme
 
   } else if (annoSource@defaultAnno=='ensdb') {
@@ -1436,20 +1491,23 @@ getTrackGeneModel <- function(genomicRegion=NULL,
     #library('AnnotationFilter'); library('EnsDb.Hsapiens.v75')
     #annoSource['ensdb']=EnsDb.Hsapiens.v75
     pg=ggbio::autoplot(annoSource['ensdb'], AnnotationFilter::GRangesFilter(regionGR, "any"), names.expr = "gene_name",
-                       label.color = "black", color = VT$gm.exon.fill, fill = VT$gm.exon.fill) +
+                       label.color = "black", color = VT$gm.exon.fill, fill = VT$gm.exon.fill,
+                       label=VT$gm.label, stat = VT$gm.reduce) +
       viz_geneModel_theme
   } else if (annoSource@defaultAnno=='orgdb') {
     ## Make gene model from OrganismDb object
     #library(Homo.sapiens)
     #annoSource['orgdb']=Homo.sapiens
     msg=testthat::capture_messages( pg<-ggbio::autoplot(annoSource['orgdb'], regionGR,
-                                                        label.color = "black", color = vizTHEME$gm.exon.fill, fill = vizTHEME$gm.exon.fill) +
+                                                        label.color = "black", color = vizTHEME$gm.exon.fill, fill = vizTHEME$gm.exon.fill,
+                                                        label=VT$gm.label, stat = VT$gm.reduce) +
                                       viz_geneModel_theme
     )
     ## If no result is found, pg will error and cannot determine null, only message can be captured
     if ("No transcripts found at this region.\n" %in% msg) pg=NULL
 
   }  else if (annoSource@defaultAnno=='biomart') {
+    browser()
     ## Make gene model from biomart object -- by gviz
     ## code modified from gviz::.fetchBMData()
     ## only retain the UTR feature and change other features to exon
@@ -1520,7 +1578,8 @@ getTrackGeneModel <- function(genomicRegion=NULL,
 
     if (length(geneGR)>0) {
       pg=ggbio::autoplot(geneGR, aes(type = model),
-                         label.color = "black", color = VT$gm.exon.fill, fill = VT$gm.exon.fill) +
+                         label.color = "black", color = VT$gm.exon.fill, fill = VT$gm.exon.fill,
+                         label=VT$gm.label, stat = VT$gm.reduce) +
         viz_geneModel_theme
     }
   }
@@ -1651,6 +1710,7 @@ getTrackPACds <- function(PACds, genomicRegion=NULL,
 
   VT=setVizTheme(vizTheme)
   tcks=list()
+  if (!is.null(gene)) gene=as.character(gene)
 
   # if(grepl('tri', VT$PA.shape)) {
   #   if (length(PA.columns)!=1) {
@@ -1772,7 +1832,7 @@ getTrackBams <- function(bams, genomicRegion, vizTheme=NULL) {
     }
 
     coverage.data <- cbind(coverage.data, covSigs)
-    colnames(coverage.data)[ncol(coverage.data)]= bams$label[i]
+    colnames(coverage.data)[ncol(coverage.data)]= as.character(bams$label[i])
   }
 
   #plot(x=1:length(coverage.data$Columella), y=coverage.data$Columella, type='h')
@@ -1786,13 +1846,15 @@ getTrackBams <- function(bams, genomicRegion, vizTheme=NULL) {
     coverage.data[, bams$label]=log2(coverage.data[, bams$label]+1)
   }
 
+  VT$bams.col=.setGroupColors(VT$bams.col, gvec=bams$label)
+  VT$bams.fill=.setGroupColors(VT$bams.fill, gvec=bams$label)
+
   if(VT$bam.collapse){ # plot curves/covs of all conditions in one track, but with separate curves
 
-    coverage.data.use <- coverage.data %>% tidyr::pivot_longer(cols=bams$label, names_to = c("conds"), values_to = "Coverage")
-
+    coverage.data.use <- coverage.data %>% tidyr::pivot_longer(cols=as.character(bams$label), names_to = c("conds"), values_to = "Coverage")
+    coverage.data.use$conds=factor(coverage.data.use$conds, levels=levels(bams$label))
     coverage.track <- ggplot(data=coverage.data.use, aes(x=start, y=Coverage, group=conds, col=conds)) +
       geom_line(linewidth=1.5) + scale_colour_manual(values = VT$bams.col) + viz_noYLab_theme
-
     tks[['collapse']] <- coverage.track
 
   } else { # not bam.collapse: plot each bam in one track
@@ -1800,14 +1862,26 @@ getTrackBams <- function(bams, genomicRegion, vizTheme=NULL) {
     # the same Y-axis for all tracks
     if (VT$bams.ysame) {
       if (is.null(VT$bams.ylims)) {
-        VT$bams.ylims=c(min(coverage.data[, bams$label], na.rm = TRUE), max(coverage.data[, bams$label], na.rm = TRUE))
+        VT$bams.ylims=c(min(coverage.data[, as.character(bams$label)], na.rm = TRUE),
+                        max(coverage.data[, as.character(bams$label)], na.rm = TRUE))
       }
     } else {
       VT$bams.ylim=NULL
     }
 
-    VT$bams.col=rep(VT$bams.col, length.out=length(bams$fileName))
-    VT$bams.fill=rep(VT$bams.fill, length.out=length(bams$fileName))
+    # just in case, multiple file one label
+    .setFileCols<-function(cols, bams) {
+      if (is.null(names(cols))) names(cols)=rep(bams$label, length.out=length(cols))
+      cols=data.frame(label=names(cols), color=cols)
+      cols=merge(cols, bams, by.x='label', by.y='label', all.y=TRUE)
+      cols=cols[match(bams$fileName,cols$fileName), ]
+      cols$color[is.na(cols$color)]='green'
+      cols=cols$color
+      return(cols)
+    }
+
+    VT$bams.col=.setFileCols(VT$bams.col, bams)
+    VT$bams.fill=.setFileCols(VT$bams.fill, bams)
 
     if (VT$bam.showSingle) { #  will plot tracks for individual conds
       for(i in 1:length(bams$fileName)){
@@ -1818,13 +1892,13 @@ getTrackBams <- function(bams, genomicRegion, vizTheme=NULL) {
         } else if(VT$bam.covStyle=="cov"){
           # coverage.track <- coverage.track  + geom_area(fill = VT$bams.col[i]) ## plot area under curve, slow!
           # plot verticle lines, quick!
-          coverage.track <- ggplot(coverage.data, aes(x=start,xend=start,y=0,yend=.data[[bams$label[i]]]))+
+          coverage.track <- ggplot(coverage.data, aes(x=start,xend=start,y=0,yend=.data[[as.character(bams$label)[i]]]))+
             ggplot2::geom_segment(linewidth=1, col=VT$bams.col[i])  + viz_noYLab_theme
         }
 
         if (!is.null(VT$bams.ylim)) coverage.track = coverage.track + ylim(VT$bams.ylims[1], VT$bams.ylims[2])
 
-        tks[[bams$label[i]]] <- coverage.track
+        tks[[as.character(bams$label)[i]]] <- coverage.track
 
       }
     }
@@ -1833,11 +1907,11 @@ getTrackBams <- function(bams, genomicRegion, vizTheme=NULL) {
   # covMerge: add AVG and SUM column
   cname='AVG'
   if(nrow(bams)>1 & VT$bam.covMerge =="avg"){
-    coverage.data$AVG=rowMeans(coverage.data[, bams$label, drop=F])
+    coverage.data$AVG=rowMeans(coverage.data[, as.character(bams$label), drop=F])
   }
 
   if(nrow(bams)>1 & VT$bam.covMerge=="sum"){
-    coverage.data$SUM=rowSums(coverage.data[, bams$label, drop=F])
+    coverage.data$SUM=rowSums(coverage.data[, as.character(bams$label), drop=F])
     cname='SUM'
   }
 
@@ -1912,7 +1986,7 @@ runDiffusionMap<- function(mat){
 #' @param PA.columns A string denoting the pA coordinates (e.g., coord) or ranges (e.g., UPA_start:UPA_end).
 #' @param PA.width If PA.columns is a position (e.g., coord), then the pA range can be expanded by PA.width to be visualized more clearly in the track plot.
 #'                 For example, if PA.width=10, then the pA position would be converted to a range of 2*PA.width+1 with the pA in the center.
-#' @param annoCoord The position to put the annotation bar of cell groups, only used when group is not NULL.
+#' @param annoCoord The X-position to put the annotation bar of cell groups, only used when group is not NULL.
 #' @param title Title of the track.
 #' @param vizTheme a vizTHEME-like list to specify the theme of the track.
 #' @return One track to show pA counts or ratios in individual cells. The bar width of each pA depends on PA.columns and/or PA.width. If PA.columns is like 'coord' then the bar width is 2*PA.width+1; if PA.columns is like 'start:end', then the bar width of a pA is end-start+1 of the respective pA.
@@ -1953,18 +2027,15 @@ getTrackCells <- function(PACds,
 
   if (!is.null(group)) {
     if (!(group %in% colnames(PACds@colData))) stop('group not in PACds@colData!')
-    groups <- as.character(PACds@colData[, group])
+    groups <- PACds@colData[, group]
   } else {
-    groups=rep('Cells', ncol(PACds@counts)) # all cells in one group
+    groups=factor(rep('Cells', ncol(PACds@counts))) # all cells in one group
   }
 
   groupColors <- VT$cells.group.cols
   ngroup=length(unique(groups))
 
-  if (length(groupColors)<ngroup) groupColors=rep_len(groupColors, ngroup)
-  groupColors=groupColors[1:ngroup]
-
-  if (is.null(names(groupColors))) names(groupColors)=unique(groups)
+  groupColors=.setGroupColors(groupColors, gvec=groups)
 
   PACdsGR=subsetPACds2GR(PACds, genomicRegion=genomicRegion, gene=gene,
                          PAs=PAs, PA.columns=PA.columns, PA.width=PA.width)
@@ -2244,7 +2315,7 @@ vizTracksOfRegion<-function(genomicRegion,
   paRg=.covGRregion(paRg, rt='str')
 
   cat('Get gene model track from annoSource[', annoSource@defaultAnno,']...\n')
-  geneModelTrack=getTrackGeneModel(genomicRegion=annoRg, gene=NULL, annoSource=annoSource)
+  geneModelTrack=getTrackGeneModel(genomicRegion=annoRg, gene=NULL, annoSource=annoSource, vizTheme = vizTheme)
   names(geneModelTrack)='Gene\nModel'
 
   tks=geneModelTrack
@@ -2317,9 +2388,9 @@ vizTracksOfRegion<-function(genomicRegion,
 }
 
 
-#' Get all tracks for a genomic region, a gene, or pAs
+#' Get all tracks for a genomic region, a gene, or pAs for bulk or single-cell PACdataset
 #'
-#' vizTracks gets all tracks for a genomic region, a gene, or pAs, including gene model track, pA track(s), cells track, and BAM track(s).
+#' vizTracks gets all tracks for a genomic region, a gene, or pAs, including gene model track, pA track(s), cells track, and BAM track(s) for bulk or single-cell PACdataset.
 #' \itemize{
 #' \item{"gene model track"}: plot gene models given a specific region or a gene symbol/ID, according to the annotation(s) in the annoHub object.
 #' \item{"pA track"}: plot the positions, expression levels, APA ratios for a PACdataset or multiple PACdataset objects.
@@ -2337,7 +2408,7 @@ vizTracksOfRegion<-function(genomicRegion,
 #' @param cells TRUE to add track of individual cells. Parameters starting with "cells" are applicable only when cells=TRUE.
 #' @param cells.group The column name recording cell categories in PACds@colData.
 #' @param cells.width Similar to PA.width, but for the width of the cells bar. The final bar width=2*cell.width+1.
-#' @param cells.annoCoord The position to put the annotation bar of cell groups, only used when group is not NULL.
+#' @param cells.annoCoord The X-position to put the annotation bar of cell groups, only used when group is not NULL.
 #' @param cells.method To set the method for ordering cells, diffusion (default, using diffusion map to order cells -- see Millefy Package) or sum (using the sum of all pAs)
 #' @param cells.sort To sort cells within group (group) or without group (all), or not sort (none, default).
 #' @param annoSource An annoHub object.
@@ -2376,6 +2447,8 @@ vizTracks<-function(genomicRegion=NULL,
   } else if (!(res %in% c('plot','list', 'track'))) {
     stop('res should be plot or list/track or a .pdf file name!')
   }
+
+  if (!is.null(gene)) gene=as.character(gene)
 
   if (!is.null(genomicRegion) & !is.null(gene)) stop("Either plot a genomicRegion or a gene, cannot provide both genomicRegion and gene!")
 
@@ -2572,9 +2645,14 @@ statTHEME=list(
   outlier.size=1,
   alpha=0.8,
 
-  ## bubble/markers-dot/heatmap
-  scale.low.col='#8d9fbb',
-  scale.high.col='#aa3e53',
+  ## bubble/markers-dot/marker's heatmap
+  scale.low.col='red', ##8d9fbb', #"#FF00FF",
+  scale.high.col="#FFFF00", #'#aa3e53',
+
+  ## bulk heatmap
+  heat.cols = rev(grDevices::heat.colors(50)),
+  heat.text.size=5,
+  heat.text.digits=2,
 
   ## umap
   umap.point.size=1,
@@ -2585,18 +2663,33 @@ statTHEME=list(
   ## markers
   xgroup=TRUE, #for violin/dot plots
 
-  hm.disp.min=-2.5, #for heatmap
-  hm.disp.max=NULL,
-  hm.label = TRUE,
-  hm.size = 5.5,
-  hm.hjust = 0,
-  hm.angle = 45,
-  hm.raster = TRUE,
-  hm.draw.lines = TRUE,
-  hm.lines.width = NULL,
-  hm.group.bar.height = 0.02,
+  ## marker's heatmap
+   hm.disp.min=NULL, #color range
+   hm.disp.max=NULL,
+   hm.cluster.markers=FALSE,
+   hm.cluster.dend=FALSE,
+  # hm.label = TRUE,
+  # hm.size = 5.5,
+  # hm.hjust = 0,
+  # hm.angle = 45,
+  # hm.raster = TRUE,
+  # hm.draw.lines = TRUE,
+  # hm.lines.width = NULL,
+  # hm.group.bar.height = 0.02,
+  #
+  # dot.scale=FALSE, # for dot plot
 
-  dot.scale=FALSE, # for dot plot
+
+  # \item{hm.label }:  Default is TRUE, details see Seurat::DoHeatmap.
+  # \item{hm.size }:  Default is 5.5, details see Seurat::DoHeatmap.
+  # \item{hm.hjust }:  Default is 0, details see Seurat::DoHeatmap.
+  # \item{hm.angle }:  Default is 45, details see Seurat::DoHeatmap.
+  # \item{hm.raster }:  Default is TRUE, details see Seurat::DoHeatmap.
+  # \item{hm.draw.lines }: Default is TRUE, details see Seurat::DoHeatmap.
+  # \item{hm.lines.width }: Default is NULL, details see Seurat::DoHeatmap.
+  # \item{hm.group.bar.height }: Default is 0.02, details see Seurat::DoHeatmap.
+
+  # \item{dot.scale}: parameter for the dot plot, default is FALSE.
 
   ## marker umaps
   umaps.ncol = 2
@@ -2608,35 +2701,30 @@ statTHEME=list(
 #'
 #' @param statTheme A list similar to statTHEME, containing the following parameters.
 #' \itemize{
-#' \item{group.cols}: parameter for vizStats(box/violin/point), colors for cell groups, default is `c(brewer.pal(8, "Set2"), brewer.pal(8, "Set1"))`.
+#' \item{group.cols}: parameter for vizStats or vizAPAMarkers (box/violin/point), colors for cell groups, default is `c(brewer.pal(8, "Set2"), brewer.pal(8, "Set1"))`.
 #' \item{outlier.colour}: parameter for vizStats(box/violin/point), color for outliers, defaut is "grey".
 #' \item{outlier.shape}: parameter for vizStats(box/violin/point), shape for outliers, defaut is 8.
 #' \item{outlier.size}: parameter for vizStats(box/violin/point), size for outliers, default is 1.
 #' \item{alpha}: parameter for vizStats(box/violin/point), the transparent alpha, default is 0.8.
 #'
-#' \item{scale.low.col}: parameter for bubble/markers-dot/heatmap, low point of the gradients, default is '#8d9fbb'.
-#' \item{scale.high.col}: parameter for bubble/markers-dot/heatmap, high point of the gradients, default is '#aa3e53',
+#' \item{scale.low.col}: parameter for bubble/markers-dot/markers-heatmap, low point of the gradients, default is '#8d9fbb'.
+#' \item{scale.high.col}: parameter for bubble/markers-dot/markers-heatmap, high point of the gradients, default is '#aa3e53',
 #'
+#' \item{heat.cols}: parameter for bulk-heatmap, colors for the heatmap, default is `rev(grDevices::heat.colors(50))`.
+#' \item{heat.text.size}: parameter for bulk-heatmap, text size, default is 5.
+#' \item{heat.text.digits}: parameter for bulk-heatmap, number of digits for ratio value, default is 2.
 #'
 #' \item{umap.point.size}: parameter for the UMAP plot, the point size, default is 1.
 #' \item{umap.legend.size}: parameter for the UMAP plot, the legend text size, default is 6.
 #' \item{umap.legend.key.size}: parameter for the UMAP plot, the legend key size, default is 0.4.
 #' \item{umap.legend.point.size}: parameter for the UMAP plot, the legend point size, default is 1.5.
 #'
-#' \item{xgroup}: parameter for the marker plots (iolin/dot plots), whether show cell groups on X-axis, default is TRUE.
-#'
-#' \item{hm.disp.min}: parameter for the heatmap, default is -2.5, details see Seurat::DoHeatmap.
-#' \item{hm.disp.max}: Default is NULL, details see Seurat::DoHeatmap.
-#' \item{hm.label }:  Default is TRUE, details see Seurat::DoHeatmap.
-#' \item{hm.size }:  Default is 5.5, details see Seurat::DoHeatmap.
-#' \item{hm.hjust }:  Default is 0, details see Seurat::DoHeatmap.
-#' \item{hm.angle }:  Default is 45, details see Seurat::DoHeatmap.
-#' \item{hm.raster }:  Default is TRUE, details see Seurat::DoHeatmap.
-#' \item{hm.draw.lines }: Default is TRUE, details see Seurat::DoHeatmap.
-#' \item{hm.lines.width }: Default is NULL, details see Seurat::DoHeatmap.
-#' \item{hm.group.bar.height }: Default is 0.02, details see Seurat::DoHeatmap.
-#'
-#' \item{dot.scale}: parameter for the dot plot, default is FALSE.
+#' \item{xgroup}: parameter for the marker plots (violin/dot plots), whether show cell groups on X-axis, default is TRUE.
+
+#' \item{hm.disp.min}: parameter of the min value for the marker plot heatmap, default is NULL (not set).
+#' \item{hm.disp.max}: parameter of the max value for the marker plot heatmap, default is NULL (not set).
+#' \item{hm.cluster.markers}: whether to cluster markers (rows) for the marker plot heatmap, default is FALSE.
+#' \item{hm.cluster.dend}: whether to show dendrograms for the marker plot heatmap, default is FALSE.
 #'
 #' \item{umaps.ncol}: parameter for the markers' multiple UMAP plots, which set the number of columns in the plot, default is 2.
 #' }
@@ -2671,20 +2759,30 @@ setStatTheme <- function(statTheme, check=TRUE) {
   return(statTheme)
 }
 
-#' Draw statistic plots
+#' Draw statistic plots for bulk or single-cell PACdataset
 #'
-#' vizStats draws different types of plots, including boxplot, violin plot, dot plot, and bubble plot, to show coordinates and expression (in count or ratio) of given pAs or pAs in a gene across different conditions (e.g., cell types).
+#' vizStats draws different types of plots, including boxplot, violin plot, dot plot, bubble plot, and heatmap, to show expression (in count or ratio) of given pAs or pAs in a gene across different conditions (e.g., cell types).
 #'
 #' @param PACds A dataset of the PACdataset class.
 #' @param group The column recording cell categories in PACds@colData.
 #' @param selGroups A vector to specify the order and categories to plot, otherwise plot all categories.
 #' @param gene A gene name, gene symbol, or gene id to filter PACds and gene model in the given gene.
 #' @param PAs A vector of pA ids corresponding to rownames of PACds@counts.
-#' @param figType box for boxplot, violin for violin plot, dot for violin plot with dots, bubble for bubble plot.
+#' @param figType figure type.
+#' \itemize{
+#' \item{box}: boxplot;
+#' \item{violin}: violin plot;
+#' \item{dot}: violin plot with dots;
+#' \item{bubble}: bubble plot;
+#' \item{heatmap}: heatmap which is used for bulk presentation, with each row per gene or pA and each column per sample.
+#' If there are more than 10 columns (e.g., >10 cells), then the PACds is considered as single-cell data.
+#' In this case, the PACds will be group and averaged by sample (e.g., merge cells to cell types), and then used for the heamtap.
+#' }
 #' @param log Only applicable when PACds is of count type rather then ratio type.
 #' @param statTheme A statTHEME-like list to specify the theme of the plot.
-#' @return A ggplot2 plot. The x-axis is normally the cell groups (e.g., cell types), and cell groups can be selected and sorted by selGroups.
+#' @return A ggplot2 plot. The x-axis is normally the cell groups (e.g., cell types), and cell groups can be selected and sorted by `selGroups`.
 #'         The y-axis is the value or mean of (all genes or pAs if both PA and gene are not provided; one gene -- if gene is provided; individual PAs -- if PAs is provided) in all cells of each cell type.
+#'         The order of the group is based on the factor levels of PACds@colData's group.
 #'         If PACds@supp$row=PA, there can be multiple pAs after subsetting PACds by gene or PAs.
 #'         In this case, there can be >1 resulting rows, which means that a cell type's boxplot will have multiple groups denoting multiple PAs.
 #'         In other cases, the plot only shows one gene or one PA.
@@ -2715,8 +2813,14 @@ setStatTheme <- function(statTheme, check=TRUE) {
 #'
 #' # We can change the order of groups (e.g., cell types)
 #' # by specifying `selGroups`.
-#' # change the order to RS>SC>ES
-#' vizStats(PACds, group='celltype', selGroups=c('RS','SC','ES'))
+#' # change the order to SC>RS>ES
+#' vizStats(PACds, group='celltype', selGroups=c('SC','RS','ES'))
+#'
+#' # We can also change the order of groups (e.g., cell types)
+#' # by changing the order of the factor
+#' # change the order to SC>RS>ES
+#' PACds@colData$celltype=factor(PACds@colData$celltype, levels=c('SC','RS','ES'))
+#' vizStats(PACds, group='celltype', figType="dot")
 #'
 #' # If the expression level in PACds is count,
 #' # we can also show the value in log scale if `log=TRUE`.
@@ -2724,14 +2828,19 @@ setStatTheme <- function(statTheme, check=TRUE) {
 #' vizStats(PACds, group='celltype', figType="dot", log=TRUE)
 #' # bubble plot
 #' vizStats(PACds, group='celltype', figType="bubble", log=TRUE)
+#'
+#' # heatmap -- for bulk
+#' vizStats(scPACds, group='celltype', gene=gene, PAs=NULL, figType="heatmap",
+#'          statTheme = list(heat.text.size=5))
 #' }
 #' @name vizStats
 #' @family vizStats functions
 #' @export
 vizStats<-function(PACds, group, selGroups=NULL, gene=NULL, PAs=NULL,
-                   figType=c('violin','box','dot','bubble'), log=FALSE, statTheme=NULL) {
+                   figType=c('violin','box','dot','bubble','heatmap'),
+                   log=FALSE, statTheme=NULL) {
 
-  figType=validate.arg(figType, c('violin','box','dot','bubble'))
+  figType=validate.arg(figType, c('violin','box','dot','bubble','heatmap'))
 
   ST=setStatTheme(statTheme)
 
@@ -2741,10 +2850,6 @@ vizStats<-function(PACds, group, selGroups=NULL, gene=NULL, PAs=NULL,
   # only count type can be log
   if (log & PACds@supp$dataType!='count') stop("PACds@counts is not count but ratio data (<1), cannot apply log=TRUE!")
 
-  cols=selGroups
-  if (is.null(cols)) {
-    cols=unique(PACds@colData[, group])
-  }
   # at most 10 samples can be plot
  # if(length(cols)>10){
  #   message("Warning: too many groups (>10) to plot, only show the first 10, please use subsetPACds() to filter less groups")
@@ -2753,16 +2858,18 @@ vizStats<-function(PACds, group, selGroups=NULL, gene=NULL, PAs=NULL,
 
   # filter gene or PA, if not filter, then plot mean of all gene/PA
   if (is.null(gene) & is.null(PAs)) { #mean of all gene/PA
-    PACds1=movAPA::subsetPACds(PACds, group=group, conds=cols)
+    PACds1=movAPA::subsetPACds(PACds, group=group, conds=selGroups)
     PACds1@counts[1, ]=colMeans(PACds1@counts, na.rm = TRUE)
     PACds1@counts=PACds1@counts[1, , drop=F]
     rownames(PACds1@counts)='MEAN'
   } else if (!is.null(gene)) {
-    PACds1=movAPA::subsetPACds(PACds, group=group, conds=cols, genes=gene)
+    PACds1=movAPA::subsetPACds(PACds, group=group, conds=selGroups, genes=gene)
   } else if (!is.null(PAs)) {
     if (PACds@supp$row!='PA') stop("PACds is not a PA list, cannot specify PAs!")
-    PACds1=movAPA::subsetPACds(PACds, group=group, conds=cols, PAs=PAs)
+    PACds1=movAPA::subsetPACds(PACds, group=group, conds=selGroups, PAs=PAs)
   }
+
+  if (!is.null(selGroups)) PACds1@colData[, group]=factor(PACds1@colData[, group], levels=selGroups)
 
   if (length(PACds1)==0) {
     cat("Not any data from PACds for plot, return!\n")
@@ -2780,15 +2887,23 @@ vizStats<-function(PACds, group, selGroups=NULL, gene=NULL, PAs=NULL,
     ylab='Ratio'
   }
 
-  d= data.frame(rowid=rownames(PACds1@colData), group=PACds1@colData[, group])
+  # convert to bulk if it is sc PACds
+  if (figType=='heatmap') {
+    if (ncol(PACds1@counts)>10) {
+      #warning("figtype=heatmap, and it seems that the PACds is single-cell data\n (there are >10 columns in PACds@counts), \nwill average columns by ",group,' first to get bulk-like data\n')
+      PACds1=movAPA::subsetPACds(PACds1, group=group, avg=TRUE)
+    }
+  }
+
+  d=data.frame(rowid=rownames(PACds1@colData), group=PACds1@colData[, group, drop=TRUE])
   d2=data.frame(rowid=colnames(PACds1@counts), .asDf(t(PACds1@counts)))
   colns=colnames(d2)[-1] # to avoid after .asDf, gene=111 --> colname='X111'
   d=merge(d, d2, by.x='rowid', by.y='rowid') # rowid (cellid), group (celltype), PA1..PAn (or gene)
 
   d=d %>% tidyr::pivot_longer(cols=colns, names_to = 'which', values_to = "Expr")
 
+  fill='which' # if >=2 PA, then the color is for PA, otherwise group/cell type are different colors
 
-  fill='which' # if >=2 PA, the the color is for PA, otherwise group/cell type are different colors
   if (nrow(PACds1@counts)==1) {  #single gene/PA
     ylab=paste0(ylab, ' of ', colns)
     fill='group'
@@ -2799,19 +2914,31 @@ vizStats<-function(PACds, group, selGroups=NULL, gene=NULL, PAs=NULL,
   }
 
   ## sort X-axis by cols
-  d$group=factor(d$group, levels = cols)
+  #d$group=factor(d$group, levels = cols)
+
+  if (figType=='heatmap') {
+    #colnames(d)[colnames(d)=='rowid']='sample'
+    p=ggplot(d, aes(x=group, y=which)) + geom_tile(aes(fill = Expr))  +
+      geom_text(aes(x=group, y=which, label=round(Expr, digits = ST$heat.text.digits)), size=ST$heat.text.size)+
+      scale_fill_gradientn(colours = ST$heat.cols) +
+      theme_classic()
+    return(p)
+  }
+
 
   ## for bubble, then summarize the number of average sum> 0 under each group
   if(figType=='bubble') {
     by_group <- dplyr::group_by(d, group, which)
-    d2=dplyr::summarise(by_group, percent = sum(Expr>0),
+    d2=dplyr::summarise(by_group, count = sum(Expr>0),
                  avg=mean(Expr, na.rm=TRUE),
                  .groups='drop')
-    p=ggplot(d2, aes(x = group, y = which, size = percent , color=avg))+
+    p=ggplot(d2, aes(x = group, y = which, size = count , color=avg))+
       geom_point(alpha = ST$alpha) + scale_color_gradient(low=ST$scale.low.col, high=ST$scale.high.col)
     p=p + theme_classic() + xlab(xlab)
     return(p)
   }
+
+  ST$group.cols=.setGroupColors(ST$group.cols, gvec=d[, fill, drop=T])
 
   if(figType=="box")   {
     p<-ggplot(d, aes(x=group, y=Expr)) +
@@ -2951,7 +3078,7 @@ getUMAPplot<-function(umap, xcol, ycol, group=NULL, overlay=NULL, statTheme=NULL
 }
 
 
-#' Plot a UMAP figure
+#' Plot a UMAP figure for single-cell PACdataset
 #'
 #' vizUMAP plots a UMAP plot where each point is a cell which is positioned based on the cell embeddings determined by the reduction technique.
 #'
@@ -3168,7 +3295,7 @@ PACds2SeuratObject <- function(PACds, NA.set=0) {
 }
 
 
-#' Get APA markers among cell types
+#' Get APA markers among cell types for single-cell PACdataset
 #'
 #' getAPAmarkers finds APA markers among different cell types, leveraging Seurat's FindMarkers and FindAllMarkers functions on a PACdataset.
 #'
@@ -3185,18 +3312,37 @@ PACds2SeuratObject <- function(PACds, NA.set=0) {
 #' "LR" : Uses a logistic regression framework to determine differentially expressed APA genes.
 #'  Constructs a logistic regression model predicting group membership based on each feature individually and compares this to a null model with a likelihood ratio test.
 #'  All the three methods are applicable to the count-type PACdataset, while only wilcox and t are applicable to the ratio-type PACdataset
-#' @param only.pos Only return positive markers (FALSE by default). See Seurat::FindMarkers().
-#' @param logFC log2FC threshold to filter significant markers.
+#' @param only.pos Only return positive markers (FALSE by default). If only.pos=FALSE (default), then both positive (avg_log2FC>0) and negative (avg_log2FC<0) markers will be returned. See Seurat::FindMarkers().
+#' @param logFC log2FC threshold to filter significant markers, default is 0.25.
 #' @param min.pct Only test genes that are detected in a minimum fraction of min.pct cells in either of the two populations.
 #'                Meant to speed up the function by not testing genes that are very infrequently expressed. Default is 0.1. See Seurat::FindMarkers().
-#' @return A data frame of APA marker list with columns: p_val,avg_log2FC,pct.1,pct.2,p_val_adj,cluster1,cluster2.
+#' @return A data frame of APA marker list with columns: p_val,avg_log2FC,pct.1,pct.2,p_val_adj,cluster1,cluster2,rowid,direction.
+#' \itemize{
+#' \item{p_val}: p value.
+#' \item{avg_log2FC}: log fold-chage of the average expression or APA ratio (depends on the PACds) between the two groups. Positive values indicate that the gene or pA is more highly expressed in the first group.
+#' \item{pct.1}: The percentage of cells where the gene or pA is detected in the first group.
+#' \item{pct.2}: The percentage of cells where the gene or pA is detected in the second group.
+#' \item{p_val_adj}: adjusted p value.
+#' \item{rowid}: the row name of the marker in PACds@counts, normally is a gene name or id.
+#' \item{direction.}: positive if avg_log2FC>0, otherwise negative.
+#' }
 #' @examples
 #' data(scPACds)
+#‘ # pairwise comparison
 #' getAPAmarkers(scPACds, group='celltype')
+#' # compare ES to other groups, and only return positive markers,
+#' # those with higher score in ES (avg_log2FC>0)
+#' getAPAmarkers(scPACds, group='celltype', cluster1='ES',
+#'              only.pos=TRUE, logFC=0.15, min.pct=0.1)
+#' # using default parameters, only.pos=F, logFC=0.25, min.pct=0.1
 #' getAPAmarkers(scPACds, group='celltype', cluster1='ES')
+#' # compare two cell types
 #' getAPAmarkers(scPACds, group='celltype', cluster1='ES', cluster2='RS')
-#' getAPAmarkers(scPACds,  group='celltype', cluster1='ES', cluster2='RS', method='t')
-#' getAPAmarkers(scPACds,  group='celltype', cluster1='ES', cluster2='RS', method='LR')
+#' # statistical test used for marker detection
+#' getAPAmarkers(scPACds,  group='celltype',
+#'               cluster1='ES', cluster2='RS', method='t')
+#' getAPAmarkers(scPACds,  group='celltype',
+#'              cluster1='ES', cluster2='RS', method='LR')
 #' @name getAPAmarkers
 #' @family vizMarkers functions
 #' @export
@@ -3213,7 +3359,7 @@ getAPAmarkers<-function(PACds, group, cluster1=NULL, cluster2=NULL, everyPair=TR
 
   # given count, no matter wehther it is index-type
   if (PACds@supp$row == 'gene' & PACds@supp$dataType == 'ratio') {
-    cat('It seems that PACds is APA ratio, will apply wilcox-test on the APA index to get DE APA events (each row is an APA gene).\n')
+    cat('It seems that PACds is APA ratio, \nwill apply FindMarkers (default is wilcox-test) on the APA index \nto get DE APA events (each row is an APA gene).\n')
   } else if (PACds@supp$row == 'PA' &
              PACds@supp$dataType == 'count') {
     cat('Warning: it seems that PACds is pA count, will get DE pAs (each row is a pA).\nIf you want APA markers, please use getAPAindexPACds() to transform your PACds to APA ratio.\n')
@@ -3245,6 +3391,7 @@ getAPAmarkers<-function(PACds, group, cluster1=NULL, cluster2=NULL, everyPair=TR
           APAmarkers$cluster1=cluster1
           APAmarkers$cluster2=cluster2
           APAmarkers$rowid=rownames(APAmarkers)
+          rownames(APAmarkers)=NULL
           if (i==1 & j==2) {
             mAll=APAmarkers
           } else {
@@ -3253,6 +3400,8 @@ getAPAmarkers<-function(PACds, group, cluster1=NULL, cluster2=NULL, everyPair=TR
         }
       }
       mAll<- mAll[order(mAll$cluster1, mAll$cluster2, mAll$p_val_adj, decreasing = F), ]
+      mAll$direction='positive'
+      mAll$direction[mAll$avg_log2FC<0]='negative'
       return(mAll)
 
     } else { # each cell type and other all cells
@@ -3264,7 +3413,10 @@ getAPAmarkers<-function(PACds, group, cluster1=NULL, cluster2=NULL, everyPair=TR
       colnames(APAmarkers)[colnames(APAmarkers)=='cluster']='cluster1'
       APAmarkers$cluster2=paste0('non-',APAmarkers$cluster1)
       APAmarkers$rowid=rownames(APAmarkers)
+      rownames(APAmarkers)=NULL
       APAmarkers<- APAmarkers[order(APAmarkers$cluster1, APAmarkers$p_val_adj, decreasing = F),]
+      APAmarkers$direction='positive'
+      APAmarkers$direction[APAmarkers$avg_log2FC<0]='negative'
       return(APAmarkers)
       #p_val avg_log2FC pct.1 pct.2     p_val_adj cluster    gene
       #PA19143 7.565134e-175   2.362515 0.833 0.105 5.832718e-172      ES PA19143
@@ -3283,20 +3435,152 @@ getAPAmarkers<-function(PACds, group, cluster1=NULL, cluster2=NULL, everyPair=TR
     APAmarkers$cluster1=cluster1
     APAmarkers$cluster2=ifelse(is.null(cluster2), paste0('non-',APAmarkers$cluster1), cluster2)
     APAmarkers$rowid=rownames(APAmarkers)
+    rownames(APAmarkers)=NULL
     APAmarkers<- APAmarkers[order(APAmarkers$p_val_adj, decreasing = F),]
+    APAmarkers$direction='positive'
+    APAmarkers$direction[APAmarkers$avg_log2FC<0]='negative'
     return(APAmarkers)
   }
 
 }
 
-#' Visualize APA markers
+.vizAPAMarkers<-function(PACds, group, selGroups=NULL, markers,
+                        figType=c('violin', 'heatmap', 'bubble', 'umap'),
+                        umap.x=NULL, umap.y=NULL, annoUMAP=TRUE,
+                        statTheme=NULL){
+
+  cols=selGroups
+
+  figType=validate.arg(figType, c('violin', 'heatmap', 'bubble', 'umap'))
+
+  if (figType=='umap') {
+    if (is.null(umap.x) | is.null(umap.y)) stop("figType=UMAP, should provide umap.x and umap.y!")
+  }
+
+  ST=setStatTheme(statTheme)
+
+  PACds=suppPACds(PACds, refresh = TRUE)
+  if (PACds@supp$dataType=='ratio') {
+    ST$hm.disp.min=0; ST$hm.disp.max=1
+  }
+
+  PACds=movAPA::subsetPACds(PACds, group=group, conds=cols)
+
+  if (!AinB(markers, rownames(PACds@counts))) stop("markers not all in rownames of PACds!")
+
+  if (figType %in% c('violin', 'heatmap', 'bubble'))  stObj<-PACds2SeuratObject(PACds)
+
+  if(figType=="violin"){
+    fill.by=ifelse(ST$xgroup, 'ident','feature')
+    p<- Seurat::VlnPlot(stObj, features=markers, pt.size=0, stack=TRUE, group.by=group, fill.by = fill.by,
+                        same.y.lims=TRUE, flip=ST$xgroup, cols=ST$group.cols) +
+      theme(axis.title.x=element_blank(),
+            axis.title.y=element_blank(),
+            legend.position = "none" )
+    return(p)
+  }
+
+  if(figType=="heatmap"){
+    p<-Seurat::DoHeatmap(stObj, features=markers, slot = "data", assay='PACds', group.by=group,
+                         disp.min=ST$hm.disp.min, disp.max=ST$hm.disp.max, group.colors=ST$group.cols,
+                         label = ST$hm.label,
+                         size = ST$hm.size,
+                         hjust = ST$hm.hjust,
+                         angle = ST$hm.angle,
+                         raster = ST$hm.raster,
+                         draw.lines = ST$hm.draw.lines,
+                         lines.width = ST$hm.lines.width,
+                         group.bar.height = ST$hm.group.bar.height)
+    return(p)
+  }
+
+  if(figType=="bubble"){
+    p<-Seurat::DotPlot(stObj, features = markers, group.by=group, col.min=ST$hm.disp.min, col.max=ST$hm.disp.max,
+                       cols=c(ST$scale.low.col, ST$scale.high.col), scale=ST$dot.scale) +
+      theme(panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank(),
+            axis.title = element_blank(),
+            panel.background = element_rect(fill = 'white'),
+            plot.background=element_rect(fill="white"),
+            axis.text.x  = element_text(angle=90, vjust=0.5))
+    if (ST$xgroup) p=p + coord_flip()
+    return(p)
+  }
+
+  if (figType=='umap') {
+    p=list()
+    figlabs=c()
+    if (annoUMAP) {
+      p1=getUMAPplot(PACds@colData, xcol=umap.x, ycol=umap.y, group=group, overlay=NULL)
+      p[['annoUMAP']]=p1
+      figlabs='Annotation'
+    }
+    m1=cbind(rowid=rownames(PACds@colData), PACds@colData[, c(umap.x, umap.y)])
+    for (m in markers) {
+      m2=cbind(rowid=colnames(PACds@counts), .asDf(t(as.matrix(PACds@counts[m, , drop=F]))))
+      colnames(m2)[2]=m
+      umap=merge(m1, m2, by.x='rowid', by.y='rowid')
+      p2=getUMAPplot(umap, xcol=umap.x, ycol=umap.y, group=NULL, overlay=m)
+      p[[m]]=p2
+      figlabs=c(figlabs, m)
+    }
+    nrow=floor(length(p)/ST$umaps.ncol)+(length(p)%%ST$umaps.ncol>0)
+    plpages <- ggpubr::ggarrange(plotlist=p, nrow=nrow, ncol = ST$umaps.ncol) #, labels = figlabs
+    return(plpages)
+  }
+}
+
+# set group.cols vector according to a string vector of group strings
+# .setGroupColors(group.cols=c('red','green'), gvec=c('g1','g1','g2','g3'))
+#g1      g2      g3
+#"red" "green"   "red"
+# .setGroupColors(group.cols=c(g1='red', g2='green'), gvec=c('g1','g1','g2','g3'))
+#g1      g2      g3
+#"red" "green"   "red"
+# .setGroupColors(group.cols=c(g1='red', g2='green', g4='haha'), gvec=c('g1','g1','g2','g3'))
+#g1      g2      g3
+#"red" "green"  "haha"
+# .setGroupColors(group.cols=c(g1='red', g2='green', g4='haha'), gvec=factor(c('g1','g1','g2')))
+#g1      g2
+#"red" "green"
+# .setGroupColors(group.cols=c(g1='red', g2='green', g4='haha'), gvec=factor(c('g1','g1','g2'), levels=c('g2','g1')))
+#g2      g1
+#"green"   "red"
+.setGroupColors <- function(group.cols, gvec) {
+  if (!is.factor(gvec)) gvec=factor(gvec)
+  groups=levels(gvec)
+  # subset group.cols
+  if (!is.null(names(group.cols))) {
+    if (all(groups %in% names(group.cols))) {
+      group.cols=group.cols[groups]
+    } else if (any(groups %in% names(group.cols))) {
+      group.cols=rep(group.cols, length.out=length(groups))
+      names(group.cols)[duplicated(names(group.cols))]='xxxx999'
+      names(group.cols)[!(names(group.cols) %in% groups)]=as.character(groups[!(groups %in% names(group.cols))])
+    } else {
+      names(group.cols)=NULL
+    }
+  }
+  if (is.null(names(group.cols))) {
+    if (length(group.cols)<length(groups)) {
+      group.cols=rep(group.cols, length.out=length(groups))
+    } else {
+      group.cols=group.cols[1:length(groups)]
+    }
+    names(group.cols)=as.character(groups)
+  }
+  return(group.cols)
+}
+
+#' Visualize APA markers for single-cell PACdataset
 #'
 #' vizAPAMarkers plots a violin plot, heatmap, bubble plot, or UMAP plot to show APA markers
 #'
 #' @param PACds A dataset of the PACdataset class, with each row is gene or pA.
 #' @param group The column recording cell categories in PACds@colData.
 #' @param selGroups A vector to specify the order and categories to plot, otherwise plot all categories.
-#' @param markers A vector of gene names or PA ids considered as markers that should be all present in PACds@anno.
+#' @param markers A vector of gene names or PA ids considered as markers that should be all present in row names of PACds@counts.
 #' @param figType violin/heatmap/bubble/UMAP
 #' @param umap.x The column name in PACds@colData denoting the X-axis coordinates for UMAP plot.
 #' @param umap.y Same as umap.y but for the Y-axis.  Both umap.x and umap.y are required to be in colData. See reduceDim() for getting 2D embeddings.
@@ -3344,8 +3628,6 @@ vizAPAMarkers<-function(PACds, group, selGroups=NULL, markers,
                         umap.x=NULL, umap.y=NULL, annoUMAP=TRUE,
                         statTheme=NULL){
 
-  cols=selGroups
-
   figType=validate.arg(figType, c('violin', 'heatmap', 'bubble', 'umap'))
 
   if (figType=='umap') {
@@ -3356,50 +3638,115 @@ vizAPAMarkers<-function(PACds, group, selGroups=NULL, markers,
 
   PACds=suppPACds(PACds, refresh = TRUE)
   if (PACds@supp$dataType=='ratio') {
-    ST$hm.disp.min=0; ST$hm.disp.max=1
+    if (is.null(ST$hm.disp.min)) ST$hm.disp.min=0
+    if (is.null(ST$hm.disp.max)) ST$hm.disp.max=1
+  } else {
+    if (is.null(ST$hm.disp.min)) ST$hm.disp.min=min(PACds@counts[PACds@counts>0])
+    if (is.null(ST$hm.disp.max)) ST$hm.disp.max=quantile(PACds@counts, probs=0.95)
   }
 
-  PACds=movAPA::subsetPACds(PACds, group=group, conds=cols)
+  PACds=movAPA::subsetPACds(PACds, group=group, conds=selGroups, PAs=markers)
 
   if (!AinB(markers, rownames(PACds@counts))) stop("markers not all in rownames of PACds!")
 
-  if (figType %in% c('violin', 'heatmap', 'bubble'))  stObj<-PACds2SeuratObject(PACds)
+  if (!is.null(selGroups)) PACds@colData[, group]=factor(PACds@colData[, group], levels=selGroups)
+
+  # set group colors
+  ST$group.cols=.setGroupColors(ST$group.cols, gvec=PACds@colData[, group])
+
+  if (figType %in% c('violin','bubble')) {
+    pac=as.data.frame(t(PACds@counts))
+    pac$cell=rownames(pac)
+    pac$group=PACds@colData[, group]
+
+    # Use melt to change data.frame format
+    pac <- tidyr::pivot_longer(pac, cols = !c("cell","group"), names_to  = "marker", values_to='Score')
+
+    # not change the order of markers
+    pac$marker=factor(pac$marker, levels=markers)
+  } else if (figType %in% c('heatmap')) {
+    pac=as.matrix(PACds@counts)
+    pac=pac[markers, ]
+  }
+
 
   if(figType=="violin"){
-    fill.by=ifelse(ST$xgroup, 'ident','feature')
-    p<- Seurat::VlnPlot(stObj, features=markers, pt.size=0, stack=TRUE, group.by=group, fill.by = fill.by,
-                same.y.lims=TRUE, flip=ST$xgroup, cols=ST$group.cols) +
-      theme(axis.title.x=element_blank(),
-            axis.title.y=element_blank(),
-            legend.position = "none" )
+
+    # x is group
+    if (ST$xgroup) {
+      p <- ggplot(pac, aes(group, Score, fill = group)) +
+        geom_violin(scale = "width", adjust = 1, trim = TRUE) +
+        scale_y_continuous(expand = c(0, 0), position="right", labels = function(x)
+          c(rep(x = "", times = length(x)-2), x[length(x) - 1], "")) +
+        facet_grid(rows = vars(marker), scales = "free", switch = "y") +
+        cowplot::theme_cowplot(font_size = 12) +
+        theme(legend.position = "none", panel.spacing = unit(0, "lines"),
+              plot.title = element_text(hjust = 0.5),
+              panel.background = element_rect(fill = NA, color = "black"),
+              strip.background = element_blank(),
+              strip.text = element_text(face = "bold"),
+              strip.text.y.left = element_text(angle = 0)) +
+        xlab(NULL) + ylab(NULL) +
+        scale_fill_manual(values = ST$group.cols)
+    } else {
+    # x is marker
+      p <- ggplot(pac, aes(x=Score, y=group, fill = group)) +
+        geom_violin(scale = "width", adjust = 1, trim = TRUE) +
+        scale_x_continuous(expand = c(0, 0), labels = function(x)
+          c(rep(x = "", times = length(x)-2), x[length(x) - 1], "")) +
+        facet_grid(cols = vars(marker), scales = "free")  +
+        cowplot::theme_cowplot(font_size = 12) +
+        theme(legend.position = "none", panel.spacing = unit(0, "lines"),
+              plot.title = element_text(hjust = 0.5),
+              panel.background = element_rect(fill = NA, color = "black"),
+              strip.background = element_blank(),
+              strip.text = element_text(face = "bold"),
+              strip.text.x.top = element_text(angle = 90, hjust = 0, vjust = 0.5)) +
+        xlab(NULL) + ylab(NULL) +
+        scale_fill_manual(values = ST$group.cols)
+    }
+    # ref https://ycl6.github.io/StackedVlnPlot/
+
     return(p)
   }
 
   if(figType=="heatmap"){
-    p<-Seurat::DoHeatmap(stObj, features=markers, slot = "data", assay='PACds', group.by=group,
-                 disp.min=ST$hm.disp.min, disp.max=ST$hm.disp.max, group.colors=ST$group.cols,
-                 label = ST$hm.label,
-                 size = ST$hm.size,
-                 hjust = ST$hm.hjust,
-                 angle = ST$hm.angle,
-                 raster = ST$hm.raster,
-                 draw.lines = ST$hm.draw.lines,
-                 lines.width = ST$hm.lines.width,
-                 group.bar.height = ST$hm.group.bar.height)
+
+    cluster_anno=factor(PACds@colData[, group])
+    col_fun = circlize::colorRamp2(c(ST$hm.disp.min, ST$hm.disp.max), c(ST$scale.low.col, ST$scale.high.col))
+
+    p=ComplexHeatmap::Heatmap(pac, name = "Score",
+            column_split = cluster_anno,
+            cluster_columns = TRUE,
+            show_column_dend = FALSE,
+            cluster_column_slices = F,
+            column_title_gp = grid::gpar(fontsize = 12),
+            column_gap = unit(0.5, "mm"),
+            cluster_rows = ST$hm.cluster.markers,
+            show_row_dend = ST$hm.cluster.dend,
+            col = col_fun,
+            row_names_gp = grid::gpar(fontsize = 12),
+            column_title_rot = 90,
+            top_annotation = ComplexHeatmap::HeatmapAnnotation(foo = ComplexHeatmap::anno_block(gp = grid::gpar(fill = ST$group.cols))),
+            show_column_names = FALSE,
+            use_raster = TRUE,
+            raster_quality = 4)
+    # ref https://divingintogeneticsandgenomics.com/post/enhancement-of-scrnaseq-heatmap-using-complexheatmap/
     return(p)
   }
 
   if(figType=="bubble"){
-    p<-Seurat::DotPlot(stObj, features = markers, group.by=group, col.min=ST$hm.disp.min, col.max=ST$hm.disp.max,
-               cols=c(ST$scale.low.col, ST$scale.high.col), scale=ST$dot.scale) +
-      theme(panel.grid.major = element_blank(),
-            panel.grid.minor = element_blank(),
-            panel.border = element_blank(),
-            axis.title = element_blank(),
-            panel.background = element_rect(fill = 'white'),
-            plot.background=element_rect(fill="white"),
-            axis.text.x  = element_text(angle=90, vjust=0.5))
-    if (ST$xgroup) p=p + coord_flip()
+
+    by_group <- dplyr::group_by(pac, group, marker)
+    d2=dplyr::summarise(by_group, Count = sum(Score>0),
+                        Score=mean(Score, na.rm=TRUE),
+                        .groups='drop')
+    p=ggplot(d2, aes(x = group, y = marker, size = Count , color=Score))+
+      geom_point(alpha = ST$alpha) + scale_color_gradient(low=ST$scale.low.col, high=ST$scale.high.col)
+    p=p + theme_classic() + xlab(NULL) + ylab(NULL)
+
+    if (!ST$xgroup) p=p + coord_flip()
+
     return(p)
   }
 
@@ -3425,4 +3772,46 @@ vizAPAMarkers<-function(PACds, group, selGroups=NULL, markers,
     return(plpages)
   }
 }
+
+
+#' Counts number of APA markers from the result of getAPAmarkers
+#'
+#' countAPAmarkers simply counts and plots number of APA markers from the result of getAPAmarkers.
+#'
+#' @param markerRes A table from getAPAmarkers.
+#' @param plot TRUE to plot a bar plot, default is TRUE.
+#' @return a count table.
+#' @examples
+#' data(scPACds)
+#‘ # pairwise comparison
+#' markerRes=getAPAmarkers(scPACds, group='celltype')
+#' countAPAmarkers(markerRes)
+#' @family vizMarkers functions
+#' @export
+countAPAmarkers <- function(markerRes, plot=T) {
+  m=markerRes
+  m$pair=paste0(m$cluster1,'~',m$cluster2)
+  by_group <- dplyr::group_by(m, pair, direction)
+  d=dplyr::summarise(by_group, Count = length(rowid), .groups='drop')
+
+  ## barplot to show numbers of APA markers
+  if (plot) {
+    p=ggplot2::ggplot(data=d, aes(x=pair, y=Count, fill=direction)) +
+      geom_bar(stat="identity",position=position_dodge()) +
+      ylab("# APA markers")+xlab(NULL) +
+      geom_text(aes(label = Count), color = "white",
+                size = 4, vjust = 1.5, position = position_dodge(.9)) +
+      theme(panel.grid = element_blank(), panel.background = NULL)
+    print(p)
+  }
+  return(d)
+}
+
+
+
+
+
+
+
+
 
