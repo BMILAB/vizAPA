@@ -6,7 +6,7 @@ output:
   html_document: 
     toc: yes
 vignette: >
-  %\VignetteIndexEntry{Read_PACs_data_from_scAPAtrap}
+  %\VignetteIndexEntry{Read_PAC_data_from_scAPAtrap}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}    
 ---
