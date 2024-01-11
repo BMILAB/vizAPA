@@ -60,7 +60,7 @@ This tutorial takes a `PACdataset` object storing a list of poly(A) sites and BA
 ### Read_PAC_data_from_Sierra
 This documentation describes how to use [Sierra](https://github.com/VCCRI/Sierra/wiki/Sierra-Vignette) to detect poly(A) sites from single-cell RNA-seq data, read the poly(A) sites data from `Sierra`, and then analyze it with `vizAPA`. We used single-cell RNA sequencing data from peripheral blood mononuclear cells (PBMCs) for demonstration. 
 
-### Read_PACs_data_from_scAPAtrap
+### Read_PAC_data_from_scAPAtrap
 This documentation describes how to use vizAPA to visualize poly(A) sites (pAs) identified from [scAPAtrap](https://github.com/BMILAB/scAPAtrap/).
 
 
