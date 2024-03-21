@@ -1463,10 +1463,10 @@ getTrackGeneModel <- function(genomicRegion=NULL,
 
     if (length(geneGR)==0) {
       pg=NULL
-    } else {
+    } else { # fix bug 20240321: remove reduce for gff gene model
       pg=ggbio::autoplot(geneGR, aes(type = model),
                          label.color = "black", color = VT$gm.exon.fill, fill = VT$gm.exon.fill,
-                         label=VT$gm.label, stat = VT$gm.reduce) +
+                         label=VT$gm.label) +
         viz_geneModel_theme
     }
   } else if (annoSource@defaultAnno=='txdb') {
