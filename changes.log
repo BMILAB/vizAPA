@@ -6,3 +6,7 @@ Add gm.reduce, gm.label in vizTHEME; add hm.cluster.markers, hm.cluster.dend in 
 Change implementation of vizAPAmarkers, using in-house code instead of Seurat's marker plots.
 Change default colors for scale.low/high.col.
 Add factor level support of PACds@colData$group to set order of the vizStats plot.
+
+2024/03/21
+Fix a bug when plotting gene track for GFF3 annoSource.
+
