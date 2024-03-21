@@ -63,6 +63,17 @@ This documentation describes how to use [Sierra](https://github.com/VCCRI/Sierra
 ### Read_PAC_data_from_scAPAtrap
 This documentation describes how to use vizAPA to visualize poly(A) sites (pAs) identified from [scAPAtrap](https://github.com/BMILAB/scAPAtrap/).
 
+### Note on using GFF3 file as the genome annotation
+```
+## There is a unfixable bug in addAnno() for adding a GFF3 object
+## but we can use the following code instead
+GFF='Homo_sapiens.GRCh38.88.chr6.gtf'
+gff <- useGff(GFF)
+annoSource=new("annoHub")
+##annoSource=addAnno(annoSource, gff) ## DONOT USE THIS CODE!
+annoSource@annos$gff=gff
+annoSource=setDefaultAnno(annoSource, 'gff')
+```
 
 ## Citation
 If you are using vizAPA, please cite: Xingyu Bi#, Wenbin Ye#, Xin Cheng, Ning Yang, and Xiaohui Wu*: vizAPA: visualizing dynamics of alternative polyadenylation from bulk and single-cell data.
